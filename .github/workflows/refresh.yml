@@ -70,6 +70,7 @@ jobs:
           python summaries.py
           python export_csv.py          # tidy/long CSVs
           python chart_csv.py           # chart-ready wide CSVs (what Excel loads)
+          python extra_summaries.py     # G1/G2/G3 hourly-granularity tables
       - name: Publish CSVs to /published
         run: |
           mkdir -p published/charts

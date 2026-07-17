@@ -8,7 +8,6 @@ on:
     - cron: "0 6 2 * *"      # 06:00 UTC on the 2nd of each month
   workflow_dispatch: {}       # manual "Run workflow" button
 
-# allow the job to commit the refreshed CSVs back to the repo
 permissions:
   contents: write
 
@@ -17,36 +16,64 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  refresh:
+  # ---- 1) fetch each country in parallel (keeps wall-clock ~40 min) ----------
+  fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        country: [DE, ES, PT, FR, IT]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Fetch + build + summarise + export CSVs
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - name: Fetch ${{ matrix.country }}
         env:
           ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
         working-directory: _tools
         run: |
-          python fetch.py            # full pull, all years (resumable within run)
-          python fetch.py            # 2nd pass: only re-pulls files missing from transient 503s
+          python fetch.py --country ${{ matrix.country }}
+          python fetch.py --country ${{ matrix.country }}   # 2nd pass fills 503 gaps
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raw-${{ matrix.country }}
+          path: data/raw/
+          retention-days: 1
+
+  # ---- 2) assemble, summarise, publish --------------------------------------
+  build:
+    needs: fetch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - name: Download all raw data
+        uses: actions/download-artifact@v4
+        with:
+          path: _dl
+      - name: Merge raw artifacts into data/raw
+        run: |
+          mkdir -p data/raw
+          find _dl -name '*.parquet' -exec cp {} data/raw/ \;
+          echo "raw files: $(ls data/raw | wc -l)"
+      - name: Build + summarise + export
+        working-directory: _tools
+        run: |
           python build_hourly.py
           python summaries.py
-          python export_csv.py
-
+          python export_csv.py          # tidy/long CSVs
+          python chart_csv.py           # chart-ready wide CSVs (what Excel loads)
       - name: Publish CSVs to /published
         run: |
-          mkdir -p published
+          mkdir -p published/charts
           cp outputs/csv/*.csv outputs/csv/manifest.json published/
+          cp outputs/csv/charts/*.csv published/charts/
           echo "Last refreshed: $(date -u +'%Y-%m-%d %H:%M UTC')" > published/LAST_REFRESH.txt
-
       - name: Commit published data
         run: |
           git config user.name  "power-price-bot"
@@ -56,5 +83,6 @@ jobs:
             echo "no data changes"
           else
             git commit -m "data refresh $(date -u +'%Y-%m-%d')"
+            git pull --rebase --autostash || true
             git push
           fi

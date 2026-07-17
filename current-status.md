@@ -38,7 +38,35 @@ Redburn ENTSO-E figures. Ready for PowerPoint linking.
 
 ---
 
-## PHASE 2 — in progress (paused 2026-07-16): direct-from-Excel refresh (Option C)
+## PHASE 2 — GitHub-hosted auto-refresh (2026-07-17, in progress)
+**Chosen approach** (superseded Option C direct-from-Excel — Mac Excel can't author PQ / has no
+"From Web", and Mac testing was unreliable under CRD/virtual displays). Constraint: must be
+refreshable by a **non-technical person while Fred is away**, on a **Windows** work PC.
+
+**Design:** scheduled GitHub Action runs the Python pipeline monthly (+ on-demand), publishes
+chart-ready CSVs to public raw URLs. Windows Excel loads them via **From Web** with
+**refresh-on-open** → a non-technical user just OPENS the file and it's current. PPT links auto-update.
+
+**Built & live:**
+- Public repo **github.com/fredhill123/power-price-data** (owner fredhill123). Pushed pipeline +
+  workflow. `ENTSOE_API_KEY` set as encrypted Actions Secret (key NOT in code — resolves from env or
+  git-ignored `_tools/.entsoe_key`).
+- `.github/workflows/refresh.yml` (cron 2nd@06:00 UTC + workflow_dispatch, double-fetch pass).
+- `_tools/export_csv.py` (tidy CSVs) + `_tools/chart_csv.py` (chart-ready WIDE CSVs, pre-allocated to
+  2035). Validated vs Phase-1 numbers. Published raw URLs confirmed HTTP 200.
+- Docs: `GITHUB.md` (ops + handover — repo is transferable to a colleague/org; successor swaps their
+  own ENTSO-E key), `EXCEL_SETUP.md` (one-time Windows setup: load CSVs, refresh-on-open, charts, PPT).
+- First Action run triggered (run 29559544914) to prove the cloud pipeline end-to-end.
+
+**Uncommitted locally (push after the running Action finishes, to avoid push conflict):** workflow
+update adding chart_csv step, `chart_csv.py`, seeded `published/charts/*.csv`, `EXCEL_SETUP.md`.
+
+**NEXT:** (1) after Action completes, pull, then push the above + re-run to publish chart CSVs.
+(2) Fred does the one-time **Windows** setup per `EXCEL_SETUP.md` (starting with the Part A smoke
+test). (3) Optional future: pre-embed the From Web queries in the .xlsx (DataMashup) so it's fully
+turnkey — deferred (can't test on Mac).
+
+### (archived) Option C attempt — direct-from-Excel
 **Goal:** update the workbook on Fred's **Windows work PC** (locked down: no terminal, no installs,
 Excel only, can reach any external URL) purely via Excel **Power Query** hitting ENTSO-E — so the
 Python pipeline here is the initial build, but ongoing refresh is Excel-native. Trigger = manual

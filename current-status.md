@@ -61,10 +61,36 @@ chart-ready CSVs to public raw URLs. Windows Excel loads them via **From Web** w
 **Uncommitted locally (push after the running Action finishes, to avoid push conflict):** workflow
 update adding chart_csv step, `chart_csv.py`, seeded `published/charts/*.csv`, `EXCEL_SETUP.md`.
 
-**NEXT:** (1) after Action completes, pull, then push the above + re-run to publish chart CSVs.
-(2) Fred does the one-time **Windows** setup per `EXCEL_SETUP.md` (starting with the Part A smoke
-test). (3) Optional future: pre-embed the From Web queries in the .xlsx (DataMashup) so it's fully
-turnkey — deferred (can't test on Mac).
+**Division of labour (agreed):** Claude builds the CHARTS (openpyxl can't add Power Query, and would
+STRIP it if it saved a file that had queries — so Claude must go FIRST, Fred adds queries LAST in Excel
+which preserves the charts). Never open Fred's query-file with openpyxl and save.
+
+**BUILT since:** `_tools/build_linked.py` -> `outputs/PowerPriceData_Linked.xlsx` (13 sheets): each
+figure sheet has its chart CSV's data at A1 + a pre-built native Excel chart wired to the Redburn-relevant
+columns (Fig1 line, Fig2/3cum/4 line, Fig3/5/9 clustered bar, Fig6 scatter, Fig7 stacked-col+price-line
+combo), styled navy/teal. All chart types validated by rendering to PDF via soffice (charts display OK).
+Delivered to Fred. Each sheet carries a red SETUP note with its From-Web URL + load target; READ_ME_FIRST
+tab included.
+
+**INCREMENTAL refresh (2026-07-17):** history (2019-2025) frozen as committed `data/processed/
+master_fixed.parquet` (24MB) + `capacity_fixed.parquet`. Each Action run fetches ONLY the current year
+(2026) per country, `build_hourly.py` (default = incremental) stitches it onto the frozen history →
+runs drop from ~65min to ~5-10min. `build_hourly.py --full` re-freezes everything (annual rollover /
+bootstrap). Regression-checked: identical numbers (DE24 457/628, Fig5 Solar -41.1, Fig1 SD 52.73).
+Workflow fetch step now `--years $CURRENT --force`. Annual TODO: after a year completes, run a `--full`
+build once to fold it into master_fixed.
+
+**Fig1 calibration PASSED** on the no-seed file: chart reads live query table (B-F), G-L empty, no shift.
+Mechanism proven end-to-end on Fred's Windows Excel. Fred clear to wire the remaining sheets.
+Gotcha learned: the SEED (data at load target) caused Power Query to insert+shift; empty target loads in
+place. Also: two same-named downloads confused which file was tested (the `(1)` file was the real one).
+
+**NEXT / where we paused:** (1) Fred wires just the **Fig1** query on Windows (From Web -> Load to
+'Fig1_PriceSD'!A1), saves, sends the file BACK. Claude opens it READ-ONLY (safe — reading never strips PQ)
+to confirm Power Query's exact table layout matches the chart's cell refs; adjust build_linked.py if
+needed, resend. (2) Fred then wires the remaining queries + ticks refresh-on-open on each. (3) Paste-link
+charts into PPT (set links Automatic). (4) Verify Action run went green + auto-committed fresh CSVs.
+Known wrinkle: fig6/fig7 CSVs are very wide (fig7=1701 cols) — functional but could be narrowed later.
 
 ### (archived) Option C attempt — direct-from-Excel
 **Goal:** update the workbook on Fred's **Windows work PC** (locked down: no terminal, no installs,

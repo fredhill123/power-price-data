@@ -9,8 +9,11 @@ __pycache__/
 *.pyc
 .extracted/
 
-# regenerated data (the Action rebuilds these)
-data/
+# regenerated data (the Action rebuilds these) — but KEEP the frozen history
+data/raw/
+data/processed/*
+!data/processed/master_fixed.parquet
+!data/processed/capacity_fixed.parquet
 outputs/csv/
 outputs/*.xlsx
 outputs/charts/

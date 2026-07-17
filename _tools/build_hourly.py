@@ -145,10 +145,11 @@ def build_country_year(country, year):
     out.insert(0, "country", country)
     return out.reset_index()
 
-def build_capacity():
+def build_capacity(years=None):
+    years = years if years is not None else cfg.YEARS
     rows = []
     for country in cfg.COUNTRY_ORDER:
-        for year in cfg.YEARS:
+        for year in years:
             cap = _read(country, "capacity", year)
             if cap is None:
                 continue
@@ -170,25 +171,51 @@ def build_capacity():
                 rows.append({"country": country, "year": year, "tech": tech, "capacity_mw": mw})
     return pd.DataFrame(rows)
 
-def main():
+FIXED_MASTER = os.path.join(cfg.PROC_DIR, "master_fixed.parquet")
+FIXED_CAP = os.path.join(cfg.PROC_DIR, "capacity_fixed.parquet")
+LEAD = ["country", "ts_utc", "price", "load", "gen_total", "pumped_consumption",
+        "flow_import", "flow_export", "flow_net"]
+
+def _order_cols(df):
+    gencols = [f"gen_{c}" for c in cfg.TECH_ORDER]
+    return df[[c for c in LEAD if c in df.columns] + [c for c in gencols if c in df.columns]]
+
+def _build_years(years):
     frames = []
     for country in cfg.COUNTRY_ORDER:
-        for year in cfg.YEARS:
+        for year in years:
             df = build_country_year(country, year)
             if df is not None and len(df):
-                frames.append(df)
-                print(f"  {country} {year}: {len(df)} hours", flush=True)
-    master = pd.concat(frames, ignore_index=True)
-    # column order
-    lead = ["country", "ts_utc", "price", "load", "gen_total", "pumped_consumption",
-            "flow_import", "flow_export", "flow_net"]
-    gencols = [f"gen_{c}" for c in cfg.TECH_ORDER]
-    master = master[[c for c in lead if c in master.columns] + [c for c in gencols if c in master.columns]]
+                frames.append(df); print(f"  {country} {year}: {len(df)} hours", flush=True)
+    return _order_cols(pd.concat(frames, ignore_index=True)) if frames else None
+
+def main():
+    import sys
+    full = "--full" in sys.argv
+    cur = cfg.CURRENT_YEAR
+
+    if full:
+        # bootstrap / annual re-freeze: rebuild everything from raw AND refreeze history
+        print(f"FULL build (all years {cfg.YEARS[0]}-{cfg.YEARS[-1]})", flush=True)
+        master = _build_years(cfg.YEARS)
+        cap = build_capacity(cfg.YEARS)
+        # refreeze completed years (< current) so future incremental runs are fast
+        master[pd.to_datetime(master.ts_utc, utc=True).dt.year < cur].to_parquet(FIXED_MASTER, index=False)
+        cap[cap.year < cur].to_parquet(FIXED_CAP, index=False)
+        print(f"refroze history (<{cur}) -> master_fixed / capacity_fixed", flush=True)
+    else:
+        # incremental: build only the current year from raw, stitch onto frozen history
+        print(f"INCREMENTAL build (current year {cur}; history from master_fixed)", flush=True)
+        current = _build_years([cur])
+        fixed = pd.read_parquet(FIXED_MASTER)
+        fixed = fixed[pd.to_datetime(fixed.ts_utc, utc=True).dt.year != cur]  # safety: no overlap
+        master = _order_cols(pd.concat([fixed, current], ignore_index=True)) if current is not None else _order_cols(fixed)
+        capf = pd.read_parquet(FIXED_CAP)
+        cap = pd.concat([capf[capf.year != cur], build_capacity([cur])], ignore_index=True)
+
     mp = os.path.join(cfg.PROC_DIR, "hourly_master.parquet")
     master.to_parquet(mp, index=False)
     print(f"master -> {mp}  shape {master.shape}", flush=True)
-
-    cap = build_capacity()
     cp = os.path.join(cfg.PROC_DIR, "capacity_annual.parquet")
     cap.to_parquet(cp, index=False)
     print(f"capacity -> {cp}  shape {cap.shape}", flush=True)

@@ -19,7 +19,7 @@ jobs:
   # ---- 1) fetch each country in parallel (keeps wall-clock ~40 min) ----------
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 100          # DE 15-min data is slow on GitHub's 2-core runners (~60-65 min)
     strategy:
       fail-fast: false
       matrix:
@@ -29,13 +29,15 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install -r requirements.txt
-      - name: Fetch ${{ matrix.country }}
+      - name: Fetch ${{ matrix.country }} (current year only — history is frozen)
         env:
           ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
         working-directory: _tools
         run: |
-          python fetch.py --country ${{ matrix.country }}
-          python fetch.py --country ${{ matrix.country }}   # 2nd pass fills 503 gaps
+          YEAR=$(python -c "from datetime import date; print(date.today().year)")
+          echo "fetching ${{ matrix.country }} $YEAR"
+          python fetch.py --country ${{ matrix.country }} --years $YEAR --force
+          python fetch.py --country ${{ matrix.country }} --years $YEAR          # 2nd pass fills 503 gaps
       - uses: actions/upload-artifact@v4
         with:
           name: raw-${{ matrix.country }}

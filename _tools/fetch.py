@@ -31,6 +31,8 @@ from entsoe.exceptions import NoMatchingDataError
 
 import config as cfg
 
+if not cfg.API_KEY:
+    raise SystemExit("No ENTSO-E API key: set ENTSOE_API_KEY env var or create _tools/.entsoe_key")
 client = EntsoePandasClient(api_key=cfg.API_KEY, retry_count=4, retry_delay=8)
 
 SLEEP = 0.7          # politeness pause between calls (well under 400/min limit)

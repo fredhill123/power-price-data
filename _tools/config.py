@@ -24,6 +24,8 @@ from __future__ import annotations
 #   2) a git-ignored local file  _tools/.entsoe_key  (for runs on Fred's machine)
 import os as _os
 def _load_api_key():
+    # Lazy: return None if absent so build/summary scripts (which don't fetch)
+    # can import config without a key. fetch.py raises when it actually needs it.
     k = _os.environ.get("ENTSOE_API_KEY")
     if k:
         return k.strip()
@@ -31,8 +33,7 @@ def _load_api_key():
     if _os.path.exists(kf):
         with open(kf) as f:
             return f.read().strip()
-    raise RuntimeError(
-        "No ENTSO-E API key: set ENTSOE_API_KEY env var or create _tools/.entsoe_key")
+    return None
 API_KEY = _load_api_key()
 
 # ---- Year handling (future-proof) -----------------------------------------

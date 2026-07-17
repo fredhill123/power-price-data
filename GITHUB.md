@@ -12,8 +12,18 @@ just opens the file. Nobody has to run anything.
 
 ## Run it manually (anyone with repo access)
 GitHub → **Actions** tab → *Refresh ENTSO-E power-price data* → **Run workflow**.
-Takes ~30–45 min. When it finishes, `published/*.csv` is updated; open the
-workbook and it pulls the new data.
+Takes ~10–15 min (it only re-fetches the current year; 2019–2025 history is
+frozen in `data/processed/master_fixed.parquet`). When it finishes,
+`published/*.csv` is updated; open the workbook and it pulls the new data.
+
+## Once a year (fold the completed year into the frozen history)
+In January, after a year finishes, re-freeze so it stops being re-fetched:
+```
+cd _tools && python fetch.py && python build_hourly.py --full
+```
+then commit the updated `data/processed/master_fixed.parquet` +
+`capacity_fixed.parquet`. (Optional — skipping it just means the just-ended year
+keeps being re-fetched live, which still works, only slightly slower.)
 
 ## The API key
 Stored as the encrypted repo **Secret** `ENTSOE_API_KEY` (Settings → Secrets and

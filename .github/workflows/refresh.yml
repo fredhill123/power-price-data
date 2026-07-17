@@ -1,0 +1,60 @@
+name: Refresh ENTSO-E power-price data
+
+# Keeps the published CSVs current with NO human trigger, so a non-technical
+# person just opens the Excel workbook (set to refresh-on-open) and gets fresh
+# data. Also runnable on demand from the Actions tab ("Run workflow").
+on:
+  schedule:
+    - cron: "0 6 2 * *"      # 06:00 UTC on the 2nd of each month
+  workflow_dispatch: {}       # manual "Run workflow" button
+
+# allow the job to commit the refreshed CSVs back to the repo
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch + build + summarise + export CSVs
+        env:
+          ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
+        working-directory: _tools
+        run: |
+          python fetch.py            # full pull, all years (resumable within run)
+          python fetch.py            # 2nd pass: only re-pulls files missing from transient 503s
+          python build_hourly.py
+          python summaries.py
+          python export_csv.py
+
+      - name: Publish CSVs to /published
+        run: |
+          mkdir -p published
+          cp outputs/csv/*.csv outputs/csv/manifest.json published/
+          echo "Last refreshed: $(date -u +'%Y-%m-%d %H:%M UTC')" > published/LAST_REFRESH.txt
+
+      - name: Commit published data
+        run: |
+          git config user.name  "power-price-bot"
+          git config user.email "actions@github.com"
+          git add published
+          if git diff --staged --quiet; then
+            echo "no data changes"
+          else
+            git commit -m "data refresh $(date -u +'%Y-%m-%d')"
+            git push
+          fi

@@ -1,0 +1,4 @@
+entsoe-py==0.8.0
+pandas>=2.0
+pyarrow>=15
+duckdb>=1.0

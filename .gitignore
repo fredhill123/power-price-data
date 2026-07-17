@@ -1,0 +1,29 @@
+# secrets
+_tools/.entsoe_key
+*.env
+secrets/
+
+# environments / caches
+_tools/.venv/
+__pycache__/
+*.pyc
+.extracted/
+
+# regenerated data (the Action rebuilds these)
+data/
+outputs/csv/
+outputs/*.xlsx
+outputs/charts/
+outputs/Test_PQ.xlsx
+
+# local logs / scratch
+_meta/fetch_*.log
+_meta/fetch_run.log
+
+# source deck (copyrighted, large)
+*.docx
+
+# macOS + local scratch/legacy
+.DS_Store
+_meta/fetch_log.txt
+_tools/powerquery/

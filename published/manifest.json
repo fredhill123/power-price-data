@@ -1,0 +1,132 @@
+{
+  "generated_utc": "2026-07-17T05:58:39Z",
+  "tables": {
+    "neg_hours": {
+      "rows": 40,
+      "cols": [
+        "country",
+        "year",
+        "total_hours",
+        "neg_hours",
+        "near_neg_hours",
+        "neg_pct",
+        "near_neg_pct"
+      ]
+    },
+    "cum_neghours": {
+      "rows": 14640,
+      "cols": [
+        "country",
+        "year",
+        "doy",
+        "cum_near_neg",
+        "cum_neg"
+      ]
+    },
+    "intraday_price": {
+      "rows": 960,
+      "cols": [
+        "country",
+        "year",
+        "hour_utc",
+        "avg_price",
+        "indexed"
+      ]
+    },
+    "price_sd": {
+      "rows": 40,
+      "cols": [
+        "country",
+        "year",
+        "sd",
+        "mean",
+        "cv"
+      ]
+    },
+    "duration_curve": {
+      "rows": 4040,
+      "cols": [
+        "country",
+        "year",
+        "pct_of_hours",
+        "price"
+      ]
+    },
+    "daily_minmax": {
+      "rows": 13770,
+      "cols": [
+        "country",
+        "year",
+        "date",
+        "min_price",
+        "max_price",
+        "mean_price",
+        "spread"
+      ]
+    },
+    "capture_monthly": {
+      "rows": 7735,
+      "cols": [
+        "country",
+        "year",
+        "month",
+        "tech",
+        "capture_price",
+        "base_price",
+        "capture_vs_base_pct",
+        "generation_gwh"
+      ]
+    },
+    "capture_annual": {
+      "rows": 680,
+      "cols": [
+        "country",
+        "year",
+        "tech",
+        "capture_price",
+        "base_price",
+        "capture_vs_base_pct",
+        "generation_twh"
+      ]
+    },
+    "intraday_genmix": {
+      "rows": 960,
+      "cols": [
+        "country",
+        "year",
+        "hour_utc",
+        "gen_Nuclear",
+        "gen_Lignite",
+        "gen_Hard coal",
+        "gen_Gas",
+        "gen_Oil & other fossil",
+        "gen_Biomass",
+        "gen_Waste",
+        "gen_Geothermal",
+        "gen_Hydro run-of-river",
+        "gen_Hydro reservoir",
+        "gen_Hydro pumped (production)",
+        "gen_Onshore wind",
+        "gen_Offshore wind",
+        "gen_Solar",
+        "gen_Marine",
+        "gen_Other renewable",
+        "gen_Other",
+        "pumped_consumption",
+        "flow_net",
+        "flow_import",
+        "flow_export",
+        "price"
+      ]
+    },
+    "capacity": {
+      "rows": 646,
+      "cols": [
+        "country",
+        "year",
+        "tech",
+        "capacity_mw"
+      ]
+    }
+  }
+}

@@ -61,7 +61,7 @@ jobs:
   build:
     needs: fetch
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -90,6 +90,19 @@ jobs:
           python extra_summaries.py     # G1/G2/G3 hourly-granularity tables
           python build_status.py        # status.csv -> the staleness banner in Excel
 
+      - name: Publish CSVs to /published
+        run: |
+          mkdir -p published/charts
+          cp outputs/csv/*.csv outputs/csv/manifest.json published/
+          cp outputs/csv/charts/*.csv published/charts/
+          echo "Last refreshed: $(date -u +'%Y-%m-%d %H:%M UTC')" > published/LAST_REFRESH.txt
+
+      - name: Install Arial-compatible fonts for the chart render
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-liberation
+          fc-list | grep -ci "liberation sans" || (echo "font missing" && exit 1)
+
       - name: Rebuild the deliverables (workbook + decks)
         working-directory: _tools
         run: |
@@ -106,12 +119,6 @@ jobs:
              outputs/HourlyPowerData_frozen.xlsx outputs/HourlyPowerData_snapshot.pptx \
              deliverables/
           ls -la deliverables/
-      - name: Publish CSVs to /published
-        run: |
-          mkdir -p published/charts
-          cp outputs/csv/*.csv outputs/csv/manifest.json published/
-          cp outputs/csv/charts/*.csv published/charts/
-          echo "Last refreshed: $(date -u +'%Y-%m-%d %H:%M UTC')" > published/LAST_REFRESH.txt
       - name: Commit published data
         run: |
           git config user.name  "power-price-bot"

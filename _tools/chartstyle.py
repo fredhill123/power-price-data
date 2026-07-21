@@ -64,7 +64,10 @@ PALETTE = {
 
 # --- House rcParams (applied on import) --------------------------------------
 RC_PARAMS = {
-    "font.family": "Arial",
+    # Arial on macOS; Liberation Sans is metrically identical and is what Linux/CI
+    # has, so a CI-rendered chart is indistinguishable from a locally-rendered one.
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial", "Liberation Sans", "Helvetica", "DejaVu Sans"],
     "font.size": 9,
     "axes.edgecolor": "#666666",
     "axes.linewidth": 0.6,

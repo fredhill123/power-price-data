@@ -44,11 +44,15 @@ START_YEAR = 2019
 CURRENT_YEAR = _date.today().year
 YEARS = list(range(START_YEAR, CURRENT_YEAR + 1))   # years we actually fetch/have data for
 
-# DISPLAY horizon: the Excel workbook pre-allocates a fixed cell grid out to
-# DISPLAY_END_YEAR. Future years (beyond CURRENT_YEAR) are laid out as BLANK
-# cells now, so a PowerPoint chart linked to the full range auto-populates them
-# on a future refresh WITHOUT any cell reference moving. Bump this once if you
-# ever need to see past 2035.
+# DISPLAY horizon: the published chart CSVs pre-allocate a fixed cell grid out to
+# DISPLAY_END_YEAR, so future years land in already-reserved cells without any
+# reference shifting. The delivered Redburn charts CAP their plotted range at the
+# last year WITH data (so no empty future years show — Fred, 2026-07-17), so this
+# horizon is just headroom for the data grid. Bump if you ever need past 2030.
+# MUST stay 2035: the live workbook's chart column references are built for a
+# 17-year block per country (DE_2019..DE_2035, then ES_..., then PT_...). Shrinking
+# this horizon shifts every country block left, so e.g. the Portugal capture chart
+# silently starts plotting French data. Verified 2026-07-21.
 DISPLAY_END_YEAR = 2035
 DISPLAY_YEARS = list(range(START_YEAR, DISPLAY_END_YEAR + 1))
 
@@ -160,6 +164,55 @@ TECH_ORDER = [
     "Other renewable",
     "Other",
 ]
+
+# ---------------------------------------------------------------------------
+# Display curation — technology charts
+# ---------------------------------------------------------------------------
+# ENTSO-E reports 17 production types, but plotting all 17 as bar categories (or
+# as stack/legend entries) makes the exhibit unreadable. Skye's volatility-capture
+# note shows a CURATED set instead: Fig 5/47 (German capture vs base) uses 10
+# technologies, Fig 50 (Portugal) 7, Fig 7 (Portugal intraday mix) 8 + storage
+# consumption, net imports and price. We mirror that.
+#
+# TECH_DISPLAY_ORDER is also the ROW ORDER of the capture/capacity chart CSVs, and
+# is arranged so each country's set is a CONTIGUOUS block — an Excel chart series
+# reads one range, so a non-contiguous selection could not be wired live:
+#     rows 1-7   Portugal's set (note Fig 50)
+#     rows 1-11  Germany's set  (note Fig 5/47)
+#     rows 12-17 minor types, kept in the data but off the charts
+TECH_DISPLAY_ORDER = [
+    "Solar",
+    "Onshore wind",
+    "Hydro run-of-river",
+    "Hydro reservoir",
+    "Hydro pumped (production)",
+    "Biomass",
+    "Gas",                        # <- Portugal's set ends here (7)
+    "Offshore wind",
+    "Nuclear",
+    "Lignite",
+    "Hard coal",                  # <- Germany's set ends here (11)
+    "Oil & other fossil",
+    "Waste",
+    "Geothermal",
+    "Marine",
+    "Other renewable",
+    "Other",
+]
+
+# How many of TECH_DISPLAY_ORDER each country's technology charts show.
+TECH_KEEP_N = {"PT": 7, "DE": 11, "ES": 11, "FR": 11, "IT": 11}
+
+
+def tech_keep(country):
+    """Curated technology list for a country's capture / capacity charts."""
+    return TECH_DISPLAY_ORDER[:TECH_KEEP_N.get(country, 11)]
+
+
+# Intraday generation mix (note Fig 7): the same curated set plus the "Other"
+# bucket. For Portugal the 9 omitted types are 0.13% of volume (no nuclear,
+# lignite, coal, oil, waste, geothermal or marine at all).
+GENMIX_KEEP = TECH_DISPLAY_ORDER[:7] + ["Other"]
 
 # ---------------------------------------------------------------------------
 # Paths

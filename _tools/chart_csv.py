@@ -78,10 +78,12 @@ def fig5():
     d = load("capture_annual")
     for metric, name in [("capture_vs_base_pct", "fig5_capture_pct"),
                          ("capture_price", "fig5_capture_abs")]:
-        out = pd.DataFrame({"technology": cfg.TECH_ORDER})
+        # curated display order: each country's set is a contiguous row block
+        out = pd.DataFrame({"technology": cfg.TECH_DISPLAY_ORDER})
         look = d.set_index(["country", "year", "tech"])[metric]
         for c, y in CY:
-            out[cyname(c, y)] = [look.get((c, y, t), np.nan) for t in cfg.TECH_ORDER]
+            out[cyname(c, y)] = [look.get((c, y, t), np.nan)
+                                 for t in cfg.TECH_DISPLAY_ORDER]
         save(out.round(2), name)
 
 # --- Fig 6: daily min/max, rows=doy, cols=country_year_{min,max} ------------
@@ -113,10 +115,11 @@ def fig7():
 # --- Fig 9: capacity, rows=tech, cols=country_year --------------------------
 def fig9():
     d = load("capacity")
-    out = pd.DataFrame({"technology": cfg.TECH_ORDER})
+    out = pd.DataFrame({"technology": cfg.TECH_DISPLAY_ORDER})
     look = d.set_index(["country", "year", "tech"])["capacity_mw"]
     for c, y in CY:
-        out[cyname(c, y)] = [look.get((c, y, t), np.nan) for t in cfg.TECH_ORDER]
+        out[cyname(c, y)] = [look.get((c, y, t), np.nan)
+                             for t in cfg.TECH_DISPLAY_ORDER]
     save(out.round(1), "fig9_capacity")
 
 # --- Capture monthly, rows=YYYY-MM, cols=country_tech -----------------------

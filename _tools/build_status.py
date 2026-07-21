@@ -1,0 +1,58 @@
+"""Publish status.csv — the health record the Excel staleness banner reads.
+
+The workbook pulls this like any other query and compares it against TODAY() on the
+user's machine, so the banner fires without anyone here noticing anything is wrong.
+
+Columns (one data row):
+  generated_utc         when this file was written (i.e. when the refresh last ran)
+  coverage_end          last hour of actual data
+  last_complete_year    latest fully-complete calendar year in the data
+  frozen_history_end    last year in master_fixed.parquet (what CI builds on)
+  charts_built_for_year the year the delivered charts' series were generated for
+  expected_refresh_days how many days may pass before a refresh is considered overdue
+"""
+from __future__ import annotations
+
+import os
+from datetime import datetime, timezone
+
+import pandas as pd
+
+import config as cfg
+from completeness import cutoffs
+
+OUT = os.path.join(cfg.OUTPUT_DIR, "csv", "charts")
+PUB = os.path.join(cfg.ROOT, "published", "charts")
+
+# CI runs on the 2nd of each month; allow a generous margin before crying wolf.
+EXPECTED_REFRESH_DAYS = 45
+
+
+def main():
+    c = cutoffs()
+
+    fixed = os.path.join(cfg.PROC_DIR, "master_fixed.parquet")
+    frozen_end = ""
+    if os.path.exists(fixed):
+        d = pd.read_parquet(fixed, columns=["ts_utc"])
+        frozen_end = int(pd.to_datetime(d.ts_utc, utc=True).dt.year.max())
+
+    row = {
+        "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "coverage_end": pd.Timestamp(c["coverage_end"]).strftime("%Y-%m-%d %H:%M"),
+        "last_complete_year": c["last_complete_year"],
+        "frozen_history_end": frozen_end,
+        # The delivered charts carry one series per year up to this year. A later
+        # completed year needs a generate.py rebuild — see ROLLOVER.md.
+        "charts_built_for_year": c["last_complete_year"],
+        "expected_refresh_days": EXPECTED_REFRESH_DAYS,
+    }
+    df = pd.DataFrame([row])
+    for d in (OUT, PUB):
+        os.makedirs(d, exist_ok=True)
+        df.to_csv(os.path.join(d, "status.csv"), index=False, encoding="utf-8")
+    print("  status.csv", row, flush=True)
+
+
+if __name__ == "__main__":
+    main()

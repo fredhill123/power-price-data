@@ -48,6 +48,7 @@ TARGETS = [
     ("B_Penetration",    "figB_penetration"),
     ("C_CaptureErosion", "figC_capture_erosion"),
     ("D_NetloadDuck",    "figD_netload_duck"),
+    ("Status",           "status"),
 ]
 
 _NS = uuid.UUID("6f9619ff-8b86-d011-b42d-00c04fc964ff")   # fixed -> deterministic uids
@@ -121,7 +122,15 @@ def sheet_data_xml(header, body, kinds):
 def patch_sheet(xml: str, header, body, kinds, table_rid: str) -> str:
     ref = f"A1:{col_letter(len(header))}{len(body)+1}"
     xml = re.sub(r'<dimension ref="[^"]*"/>', f'<dimension ref="{ref}"/>', xml)
-    xml = xml.replace("<sheetData/>", sheet_data_xml(header, body, kinds))
+    new = sheet_data_xml(header, body, kinds)
+    if "<sheetData/>" in xml:
+        xml = xml.replace("<sheetData/>", new)
+    else:
+        # sheet already has rows (the Status banner): merge, keeping ascending row order
+        existing = re.search(r"<sheetData>(.*?)</sheetData>", xml, re.S).group(1)
+        merged = new[len("<sheetData>"):-len("</sheetData>")] + existing
+        xml = re.sub(r"<sheetData>.*?</sheetData>", f"<sheetData>{merged}</sheetData>",
+                     xml, flags=re.S)
     # tableParts is the LAST child of CT_Worksheet (after <drawing/>) - order matters
     xml = xml.replace("</worksheet>",
                       f'<tableParts count="1"><tablePart r:id="{table_rid}"/></tableParts>'
@@ -278,6 +287,11 @@ def main():
         header, body, kinds = load_csv(stem)
         spart = sheet_part[tab]
         srels_path = spart.replace("worksheets/", "worksheets/_rels/") + ".rels"
+        if srels_path not in parts:          # e.g. the Status sheet: no drawing, no rels yet
+            parts[srels_path] = (
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+                f'<Relationships xmlns="{PKGREL}"></Relationships>').encode()
+            order.append(srels_path)
         srels = parts[srels_path].decode()
         rid = next_rid(srels)
 

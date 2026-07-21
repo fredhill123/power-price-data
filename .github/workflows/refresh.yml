@@ -29,12 +29,25 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install -r requirements.txt
-      - name: Fetch ${{ matrix.country }} (current year only — history is frozen)
+      - name: Fetch ${{ matrix.country }} (current year, plus the prior year at rollover)
         env:
           ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
         working-directory: _tools
         run: |
           YEAR=$(python -c "from datetime import date; print(date.today().year)")
+          # The frozen history normally ends at YEAR-1. In January it still ends at
+          # YEAR-2, so the just-completed year has to be fetched too or it is lost
+          # entirely (it is in neither the history nor the current-year pull).
+          NEED_PRIOR=$(python -c "
+          import build_hourly as b, config as c
+          end = b.frozen_history_end()
+          print(1 if end is not None and end < c.CURRENT_YEAR - 1 else 0)")
+          if [ "$NEED_PRIOR" = "1" ]; then
+            PRIOR=$((YEAR-1))
+            echo "rollover detected — fetching ${{ matrix.country }} $PRIOR as well"
+            python fetch.py --country ${{ matrix.country }} --years $PRIOR --force
+            python fetch.py --country ${{ matrix.country }} --years $PRIOR
+          fi
           echo "fetching ${{ matrix.country }} $YEAR"
           python fetch.py --country ${{ matrix.country }} --years $YEAR --force
           python fetch.py --country ${{ matrix.country }} --years $YEAR          # 2nd pass fills 503 gaps
@@ -66,11 +79,16 @@ jobs:
       - name: Build + summarise + export
         working-directory: _tools
         run: |
+          # At the January rollover, fold the completed year into the frozen history
+          # first — otherwise the incremental build below silently loses that year.
+          # No-op in every other month.
+          python build_hourly.py --absorb-prior-year
           python build_hourly.py
           python summaries.py
           python export_csv.py          # tidy/long CSVs
           python chart_csv.py           # chart-ready wide CSVs (what Excel loads)
           python extra_summaries.py     # G1/G2/G3 hourly-granularity tables
+          python build_status.py        # status.csv -> the staleness banner in Excel
       - name: Publish CSVs to /published
         run: |
           mkdir -p published/charts
@@ -81,7 +99,9 @@ jobs:
         run: |
           git config user.name  "power-price-bot"
           git config user.email "actions@github.com"
-          git add published
+          # master_fixed/capacity_fixed change only at the rollover, but they MUST be
+          # committed when they do — they are the history every later run builds on.
+          git add published data/processed/master_fixed.parquet data/processed/capacity_fixed.parquet
           if git diff --staged --quiet; then
             echo "no data changes"
           else

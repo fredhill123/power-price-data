@@ -189,10 +189,74 @@ def _build_years(years):
                 frames.append(df); print(f"  {country} {year}: {len(df)} hours", flush=True)
     return _order_cols(pd.concat(frames, ignore_index=True)) if frames else None
 
+def frozen_history_end():
+    """Last year present in the committed frozen history (None if absent)."""
+    if not os.path.exists(FIXED_MASTER):
+        return None
+    d = pd.read_parquet(FIXED_MASTER, columns=["ts_utc"])
+    return int(pd.to_datetime(d.ts_utc, utc=True).dt.year.max())
+
+
+def absorb_prior_year():
+    """Fold the just-completed year into the frozen history, from raw on disk.
+
+    CI only ever fetches the CURRENT year and stitches it onto master_fixed. At the
+    January rollover that would drop the completed year on the floor: it is neither in
+    the frozen history (which ends the year before) nor in the freshly-fetched raw.
+
+    This closes that hole WITHOUT the full raw archive (which lives only on Fred's Mac):
+    it rebuilds just the prior year from whatever raw is present and appends it. Safe to
+    run every month — it is a no-op once the history already covers that year.
+
+    Returns True if the history was extended.
+    """
+    cur = cfg.CURRENT_YEAR
+    prior = cur - 1
+    end = frozen_history_end()
+    if end is None:
+        print("no frozen history yet — nothing to absorb", flush=True)
+        return False
+    if end >= prior:
+        print(f"frozen history already covers {prior} (ends {end}) — nothing to do", flush=True)
+        return False
+
+    print(f"ABSORB: frozen history ends {end}, needs {prior} — rebuilding {prior} from raw",
+          flush=True)
+    add = _build_years([prior])
+    if add is None or not len(add):
+        print(f"!! no raw data for {prior} — cannot absorb; run ROLLOVER.md on the Mac",
+              flush=True)
+        return False
+
+    hours = len(add)
+    if hours < 30000:      # 5 countries x 8760 ~ 43-44k; well short means a partial fetch
+        print(f"!! only {hours} hours for {prior} — looks partial, refusing to freeze it. "
+              "Run ROLLOVER.md on the Mac.", flush=True)
+        return False
+
+    fixed = pd.read_parquet(FIXED_MASTER)
+    fixed = fixed[pd.to_datetime(fixed.ts_utc, utc=True).dt.year != prior]
+    _order_cols(pd.concat([fixed, add], ignore_index=True)).to_parquet(FIXED_MASTER, index=False)
+
+    capf = pd.read_parquet(FIXED_CAP)
+    capadd = build_capacity([prior])
+    if capadd is not None and len(capadd):
+        capf = pd.concat([capf[capf.year != prior], capadd], ignore_index=True)
+    capf.to_parquet(FIXED_CAP, index=False)
+
+    print(f"absorbed {prior} into the frozen history ({hours} hours) -> "
+          "COMMIT master_fixed.parquet + capacity_fixed.parquet", flush=True)
+    return True
+
+
 def main():
     import sys
     full = "--full" in sys.argv
     cur = cfg.CURRENT_YEAR
+
+    if "--absorb-prior-year" in sys.argv:
+        absorb_prior_year()
+        return
 
     if full:
         # bootstrap / annual re-freeze: rebuild everything from raw AND refreeze history

@@ -39,6 +39,7 @@ def main():
         run("summaries.py")
         run("extra_summaries.py")
         run("chart_csv.py")
+        run("build_status.py")
     # static path (fresh data)
     run("render_all.py")
     run("build_static_deck.py", os.path.join(OUT, "HourlyPowerData_snapshot.pptx"))
@@ -46,6 +47,7 @@ def main():
     # linked path (rebuild workbook + deck)
     run("add_phase4_charts.py")
     run("curate_tech_charts.py")    # curated technology sets (note Figs 5/47, 50, 7)
+    run("add_status_sheet.py")      # staleness banner (workbook opens on it)
     run("add_power_queries.py")     # re-injects the 6 PQ connections add_phase4 rebuilds over
     run("build_deck.py", TEMPLATE, os.path.join(OUT, "HourlyPowerData.xlsx"), os.path.join(OUT, "HourlyPowerData.pptx"))
     # guard

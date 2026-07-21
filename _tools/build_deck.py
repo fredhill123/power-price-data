@@ -93,7 +93,10 @@ def _static_slides():
     return out
 
 _OUTPUTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "outputs")
-IMG_DIR = os.path.join(_OUTPUTS, "deck_img")        # pre-rendered snapshots (snap_*)
+# Fixed historical snapshots (snap_*). Tracked in assets/ so a clean checkout — CI
+# included — can build the decks; falls back to outputs/ when rendered locally.
+_ASSETS = os.path.join(os.path.dirname(_OUTPUTS), "assets", "deck_img")
+IMG_DIR = _ASSETS if os.path.isdir(_ASSETS) else os.path.join(_OUTPUTS, "deck_img")
 CHARTS_DIR = os.path.join(_OUTPUTS, "deck_charts")  # render_all output (everything else, e.g. F scatter)
 SLIDES = _linked_slides()
 STATIC_SLIDES = _static_slides()

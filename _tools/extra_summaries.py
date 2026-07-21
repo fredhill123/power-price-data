@@ -28,6 +28,14 @@ YRS = list(range(cfg.START_YEAR, cfg.DISPLAY_END_YEAR + 1))   # 2019..2030
 CO = cfg.COUNTRY_ORDER                                        # DE, ES, PT, FR, IT
 JULY = 7
 
+# --- charts 16-19 (monthly "market-state" tables) helpers ---
+from completeness import cutoffs as _cutoffs
+_LCM = _cutoffs()["last_complete_month"]                      # (year, month) — gate partial months
+WIND_SOLAR = ["gen_Solar", "gen_Onshore wind", "gen_Offshore wind"]
+# pre-allocated monthly x-axis, first-of-month, 2019-01 .. DISPLAY_END_YEAR-12
+MONTH_STR = pd.date_range("2019-01-01", f"{cfg.DISPLAY_END_YEAR}-12-01",
+                          freq="MS").strftime("%Y-%m-%d").tolist()
+
 def _load():
     df = pd.read_parquet(MASTER)
     t = pd.to_datetime(df["ts_utc"], utc=True)
@@ -81,10 +89,58 @@ def g3_july(df):
     jul = df[df["month"] == JULY]
     _intraday_pivot(jul, "day", list(range(1, 32)), lambda d: f"D{d:02d}", "g3_price_july_daily")
 
+# ---------------------------------------------------------------- charts 16-19: monthly market-state tables
+def _write_monthly_country(g, name, roll=None):
+    """g has columns [country, year, month, v]; write date x country wide CSV,
+    pre-allocated to DISPLAY_END_YEAR, partial months gated, optional 12-mo rolling."""
+    g = g[[(y, m) <= _LCM for y, m in zip(g["year"], g["month"])]].copy()   # gate partial months
+    g["date"] = pd.to_datetime(dict(year=g["year"], month=g["month"], day=1)).dt.strftime("%Y-%m-%d")
+    wide = g.pivot(index="date", columns="country", values="v").reindex(MONTH_STR)
+    if roll:
+        wide = wide.rolling(roll, min_periods=roll).mean()                  # trailing 12-mo, both paths see it
+    out = pd.DataFrame({"date": MONTH_STR})
+    for c_ in CO:
+        out[c_] = wide[c_].round(2).values if c_ in wide.columns else pd.NA
+    _save(out, name)
+
+def figA_monthly_price(df):
+    g = df.groupby(["country", "year", "month"])["price"].mean().reset_index(name="v")
+    _write_monthly_country(g, "figA_monthly_price")                          # raw monthly (crisis spike is the story)
+
+def figB_penetration(df):
+    d = df.copy()
+    d["_ws"] = d[WIND_SOLAR].to_numpy().sum(axis=1)
+    g = (d.groupby(["country", "year", "month"])
+           .apply(lambda s: 100 * s["_ws"].sum() / s["gen_total"].sum())
+           .reset_index(name="v"))
+    _write_monthly_country(g, "figB_penetration", roll=12)                   # 12-mo rolling (cut seasonal saw-tooth)
+
+def figC_capture_erosion():
+    cm = pd.read_parquet(os.path.join(cfg.PROC_DIR, "summaries", "capture_monthly.parquet"))
+    cm = cm[(cm["country"] == "DE") & cm["tech"].isin(["Solar", "Onshore wind"])].copy()
+    cm = cm[[(y, m) <= _LCM for y, m in zip(cm["year"], cm["month"])]]
+    cm["date"] = pd.to_datetime(dict(year=cm["year"], month=cm["month"], day=1)).dt.strftime("%Y-%m-%d")
+    wide = cm.pivot(index="date", columns="tech", values="capture_vs_base_pct").reindex(MONTH_STR)
+    out = pd.DataFrame({"date": MONTH_STR})
+    out["DE_Solar"] = wide["Solar"].round(2).values if "Solar" in wide.columns else pd.NA
+    out["DE_Wind"] = wide["Onshore wind"].round(2).values if "Onshore wind" in wide.columns else pd.NA
+    _save(out, "figC_capture_erosion")                                       # raw monthly (deepening summer troughs = story)
+
+def figD_netload_duck(df):
+    d = df[df["country"] == "DE"].copy()
+    d["_res"] = (d["load"] - d[WIND_SOLAR].to_numpy().sum(axis=1)) / 1000.0   # GW; net load = demand - wind - solar
+    prof = d.groupby(["year", "hour"])["_res"].mean().reset_index()
+    wide = prof.pivot(index="hour", columns="year", values="_res").reindex(range(24))
+    out = pd.DataFrame({"hour_utc": list(range(24))})
+    for y in YRS:                                                            # pre-allocated year columns
+        out[f"DE_{y}"] = wide[y].round(2).values if y in wide.columns else pd.NA
+    _save(out, "figD_netload_duck")                                          # keeps current partial year (YTD profile)
+
 def main():
-    print("building extra chart tables (G1/G2/G3) ->", PUB, flush=True)
+    print("building extra chart tables (G1/G2/G3 + charts 16-19) ->", PUB, flush=True)
     df = _load()
     g1(df); g2_quarter(df); g2_month(df); g3_july(df)
+    figA_monthly_price(df); figB_penetration(df); figC_capture_erosion(); figD_netload_duck(df)
     print("done", flush=True)
 
 if __name__ == "__main__":

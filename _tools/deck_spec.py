@@ -132,12 +132,6 @@ SLIDES = [
             ex("D_netload_duck", "Net-load 'duck': demand − wind − solar by hour, by year (Germany)", "R", 19,
                "D_netload_duck.png", dict(kind="d_netload")),
          ]),
-    dict(title="Price cannibalisation: hourly price vs renewable share (Germany)",
-         kicker="Every hour of the year — the wholesale price falls as wind & solar rise, into negative territory",
-         exhibits=[
-            ex("F_cannibalisation", "Hourly price vs wind & solar share — price cannibalisation (Germany)",
-               "1up", None, "F_cannibalisation_DE.png", dict(kind="f_scatter")),
-         ]),
     dict(title="Spain intraday 'duck' — quarterly, 2019 vs 2025",
          kicker="Average intraday price by quarter (Spain day-ahead)",
          exhibits=[

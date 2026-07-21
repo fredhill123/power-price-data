@@ -1,7 +1,13 @@
-# Annual rollover — how to roll this system onto a new year
+# Annual rollover — FALLBACK ONLY
 
-**Run this once, in January, after a calendar year completes.** It is the ONLY manual
-step in the whole system; everything else refreshes itself monthly.
+> **This is no longer a routine step.** As of 2026-07-21 the GitHub Actions run does the
+> rollover itself: `build_hourly.py --absorb-prior-year` folds the completed year into the
+> frozen history, and CI then runs `generate.py` to rebuild the charts with the new year.
+> Verified end-to-end (run 29823518203).
+>
+> **Follow this document only if CI is broken** — e.g. the Status tab in the workbook warns
+> that the rollover is overdue, or the Actions run has been failing. It is also the reference
+> for what the automation is doing and why.
 
 This file is written to be self-contained: hand it to any assistant (or follow it
 yourself) with no other context. Read "Why" before running anything — the checks matter

@@ -1,73 +1,62 @@
-# Your remaining setup — Windows work machine
+# Your workflow — Windows work machine
 
-_Verified 2026-07-21 against the delivered files, and against the workbook you refreshed
-and sent back (all 6 new queries loaded exactly the published data, no column shift)._
+_Verified end-to-end on 2026-07-21 by running the full GitHub Actions workflow
+(run 29823518203): data fetched, CSVs published, and all four deliverables rebuilt
+and committed by CI, with `CONSISTENCY: PASS`._
 
-**All 18 Power Query connections are now wired into the workbook itself**, with
-refresh-on-open already ticked. There is no query-building left to do.
-
-Two steps remain.
+**There is no setup left, and nothing you need to run.** All 18 Power Query connections
+ship inside the workbook with refresh-on-open already ticked.
 
 ---
 
-## 1. Put both live files in the shared Redburn folder
-The deck links to the workbook by **absolute path** — read out of the pptx, it is:
+## The whole routine
+
+1. **Open `HourlyPowerData.xlsx`** — it refreshes itself on open.
+2. **Open `HourlyPowerData.pptx`** ▸ **File ▸ Info ▸ Edit Links to Files ▸ Update Now**
+   (or set the links to **Automatic** once, and even this goes away).
+
+That's it, monthly and forever.
+
+Both files must sit **together** at the path the deck links to:
 ```
 \\redburn.local\core\data\Oils\Oils 2.0\Power & Utilities Team Resources\Sector Presentation\
-    HourlyPowerData.xlsx
-    HourlyPowerData.pptx
 ```
-(the `H:\Oils\Oils 2.0\…` mapped drive). Both must sit **together** there. If your actual
-folder differs, tell Claude the real path and it'll rebuild the deck pointing there —
-otherwise the links won't resolve.
+(the `H:\Oils\Oils 2.0\…` mapped drive). If that path ever changes, the deck's links must be
+rebuilt to match — that is the one change that needs someone to rebuild the file.
 
-## 2. Update the deck's links
-Open `HourlyPowerData.pptx` ▸ **File ▸ Info ▸ Edit Links to Files ▸ Update Now**
-(or set to **Automatic**).
+## What happens without you
 
-That's it. From then on: open the workbook (it refreshes itself), open the deck (links
-update). The GitHub Action refreshes the underlying data monthly.
+- **Monthly** (2nd of each month, 06:00 UTC) GitHub Actions pulls fresh ENTSO-E data,
+  republishes the chart CSVs, and **rebuilds all four deliverables**, committing them to
+  `deliverables/` in the repo. Your workbook picks the data up on open.
+- **At the turn of the year** the same run folds the completed year into the frozen history
+  and rebuilds the charts so they carry the new year. Nothing manual, no rollover to remember.
 
----
+The only reason to fetch a fresh copy from `deliverables/` is if you want the *charts* to show
+a newly completed year — the data in your existing file is current either way. Grab the newest
+`HourlyPowerData.xlsx` / `.pptx` from the repo when the Status tab tells you to.
 
-## What changed, and why you don't wire queries any more
-`_tools/add_power_queries.py` injects each connection directly into the workbook —
-the M query into the DataMashup blob, plus the connection, queryTable, table and hidden
-`ExternalData_1` name — by cloning the patterns the original 12 queries already used. It
-runs inside `generate.py`, so a rebuild can never silently drop them.
+## The Status tab — read this if something looks off
 
-The 18 tabs and their sources (base URL =
-`https://raw.githubusercontent.com/fredhill123/power-price-data/main/published/charts/`):
+The workbook **opens on a `Status` sheet**. It compares the published refresh record against
+today's date on your machine and says one of:
 
-| Tab | CSV | Tab | CSV |
-|-----|-----|-----|-----|
-| Fig1_PriceSD | `fig1_price_sd` | CaptureMonthly | `capture_monthly` |
-| Fig2_Intraday | `fig2_intraday_indexed` | G1_SolarPeak | `g1_solar_peakhour` |
-| Fig2_Intraday_avg | `fig2_intraday_avg` | G2_MonthDuck | `g2_price_by_month` |
-| Fig3_NegHours | `fig3_neg_hours_annual` | A_MonthPrice | `figA_monthly_price` |
-| Fig3_CumNeg | `fig3_cum_near_neg` | B_Penetration | `figB_penetration` |
-| Fig4_Duration | `fig4_duration_curve` | C_CaptureErosion | `figC_capture_erosion` |
-| Fig5_Capture | `fig5_capture_pct` | D_NetloadDuck | `figD_netload_duck` |
-| Fig5_Capture_abs | `fig5_capture_abs` | Fig7_GenMix | `fig7_gen_mix` |
-| Fig6_MinMax | `fig6_daily_minmax` | Fig9_Capacity | `fig9_capacity` |
+- ✅ *"OK - data is current. Last refreshed …, data through …"* — nothing to do.
+- ⚠️ *"STALE DATA - the monthly refresh has not run for N days"* — the GitHub job has stopped
+  running. Someone needs to look at the Actions tab.
+- ⚠️ *"ANNUAL ROLLOVER OVERDUE - charts were built for YYYY"* — download the latest files from
+  `deliverables/`.
 
-The price-cannibalisation scatter, quarterly-duck and July-spaghetti exhibits are **static
-images** — no query, nothing to set up.
+Both warnings are in large red text and cannot be missed. Green means genuinely fine.
 
-## If you ever DO need to add a query by hand
-**Data ▸ Get Data ▸ From Web** ▸ paste the URL ▸ **Load To… ▸ Existing worksheet ▸** that
-tab's **`$A$1`**, keeping the header row (every chart reads from row 2 down). Load into
-**empty** cells — anything pre-typed makes Power Query shift the columns and detach the chart.
+## Two things not to do
+- **Never click "Recover"** if Excel offers to repair the workbook. Repair strips Power Query,
+  which is the one thing that would cost real work. Send the file to be fixed instead.
+- **Don't hand-edit the data tabs.** They are Power Query load targets; anything typed there is
+  overwritten on refresh, and pre-seeded cells can shift the columns and detach a chart.
 
-## Known limits
-- **Year-series charts don't self-extend.** The net-load duck plots `DE_2019…DE_2026` — the
-  years with data today. A future calendar year needs a `generate.py` rebuild on the Mac.
-- **Don't click "Recover"** if Excel ever offers to repair the file. Repair strips Power
-  Query, which is the one thing that would cost you real work. Send the file to Claude instead.
+## What needs no setup at all
+`HourlyPowerData_frozen.xlsx` and `HourlyPowerData_snapshot.pptx` are fully self-contained —
+open and use. They're rebuilt monthly alongside the live pair.
 
-## What needs NO setup
-`HourlyPowerData_frozen.xlsx` and `HourlyPowerData_snapshot.pptx` are self-contained — just
-open them. The monthly data refresh (GitHub Action) and the whole generate-a-fresh-deck path
-are already done.
-
-_Full system overview: `GENERATE.md`. Non-technical team refresh: `Deliverables/updating-the-deck`._
+_System overview: `GENERATE.md`. Manual rollover fallback (only if CI is broken): `ROLLOVER.md`._

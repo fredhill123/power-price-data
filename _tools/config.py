@@ -47,8 +47,8 @@ YEARS = list(range(START_YEAR, CURRENT_YEAR + 1))   # years we actually fetch/ha
 # DISPLAY horizon: the published chart CSVs pre-allocate a fixed cell grid out to
 # DISPLAY_END_YEAR, so future years land in already-reserved cells without any
 # reference shifting. The delivered Redburn charts CAP their plotted range at the
-# last year WITH data (so no empty future years show — Fred, 2026-07-17), so this
-# horizon is just headroom for the data grid. Bump if you ever need past 2030.
+# last year WITH data (so no empty future years show — Fred, 2026-07-17).
+#
 # MUST stay 2035: the live workbook's chart column references are built for a
 # 17-year block per country (DE_2019..DE_2035, then ES_..., then PT_...). Shrinking
 # this horizon shifts every country block left, so e.g. the Portugal capture chart
@@ -174,45 +174,78 @@ TECH_ORDER = [
 # technologies, Fig 50 (Portugal) 7, Fig 7 (Portugal intraday mix) 8 + storage
 # consumption, net imports and price. We mirror that.
 #
-# TECH_DISPLAY_ORDER is also the ROW ORDER of the capture/capacity chart CSVs, and
-# is arranged so each country's set is a CONTIGUOUS block — an Excel chart series
-# reads one range, so a non-contiguous selection could not be wired live:
-#     rows 1-7   Portugal's set (note Fig 50)
-#     rows 1-11  Germany's set  (note Fig 5/47)
-#     rows 12-17 minor types, kept in the data but off the charts
-TECH_DISPLAY_ORDER = [
-    "Solar",
-    "Onshore wind",
-    "Hydro run-of-river",
-    "Hydro reservoir",
-    "Hydro pumped (production)",
-    "Biomass",
-    "Gas",                        # <- Portugal's set ends here (7)
-    "Offshore wind",
-    "Nuclear",
-    "Lignite",
-    "Hard coal",                  # <- Germany's set ends here (11)
-    "Oil & other fossil",
-    "Waste",
-    "Geothermal",
-    "Marine",
-    "Other renewable",
-    "Other",
-]
+# An Excel chart series reads ONE contiguous range, so each country's set gets its
+# own STACKED BLOCK of rows in the capture/capacity CSVs. That lets every chart keep
+# the note's exact ordering rather than sharing one compromise order (the blocks
+# repeat some technologies — deliberate; these are chart-feed tables, one per chart).
+#
+#   rows  2-12  Germany  — note Fig 5/47 order
+#   rows 13-19  Portugal — note Fig 50 order
+#   rows 20-25  technologies in neither chart, kept for reference
+TECH_BLOCKS = {
+    # Fig 5/47: Solar, Onshore wind, Offshore wind, Hydro pumped, Hydro,
+    #           Nuclear, Biomass, Gas, Lignite, Hard coal
+    "DE": [
+        "Solar",
+        "Onshore wind",
+        "Offshore wind",
+        "Hydro pumped (production)",
+        "Hydro reservoir",
+        "Hydro run-of-river",
+        "Nuclear",
+        "Biomass",
+        "Gas",
+        "Lignite",
+        "Hard coal",
+    ],
+    # Fig 50: Solar, Wind, Hydro run-of-river, Hydro reservoir, Hydro pumped,
+    #         Biomass, Gas
+    "PT": [
+        "Solar",
+        "Onshore wind",
+        "Hydro run-of-river",
+        "Hydro reservoir",
+        "Hydro pumped (production)",
+        "Biomass",
+        "Gas",
+    ],
+}
 
-# How many of TECH_DISPLAY_ORDER each country's technology charts show.
-TECH_KEEP_N = {"PT": 7, "DE": 11, "ES": 11, "FR": 11, "IT": 11}
+_BLOCK_SEQ = ["DE", "PT"]          # stacking order == row order in the CSVs
 
 
 def tech_keep(country):
     """Curated technology list for a country's capture / capacity charts."""
-    return TECH_DISPLAY_ORDER[:TECH_KEEP_N.get(country, 11)]
+    return TECH_BLOCKS.get(country, TECH_BLOCKS["DE"])
+
+
+def tech_block_start(country):
+    """1-based data-row offset of this country's block (row 1 = CSV header)."""
+    row = 2
+    for c in _BLOCK_SEQ:
+        if c == country:
+            return row
+        row += len(TECH_BLOCKS[c])
+    return row
+
+
+def tech_row_order():
+    """Full row order of the capture/capacity CSVs: the blocks, then the leftovers."""
+    rows = []
+    for c in _BLOCK_SEQ:
+        rows += TECH_BLOCKS[c]
+    seen = set(rows)
+    rows += [t for t in TECH_ORDER if t not in seen]
+    return rows
+
+
+TECH_DISPLAY_ORDER = None   # superseded by TECH_BLOCKS / tech_row_order()
 
 
 # Intraday generation mix (note Fig 7): the same curated set plus the "Other"
 # bucket. For Portugal the 9 omitted types are 0.13% of volume (no nuclear,
 # lignite, coal, oil, waste, geothermal or marine at all).
-GENMIX_KEEP = TECH_DISPLAY_ORDER[:7] + ["Other"]
+GENMIX_KEEP = TECH_BLOCKS["PT"] + ["Other"]
 
 # ---------------------------------------------------------------------------
 # Paths

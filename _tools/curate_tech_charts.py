@@ -4,13 +4,14 @@ The PNG path curates via cfg.tech_keep()/cfg.GENMIX_KEEP; this does the same for
 Excel charts so the two update paths keep showing the same exhibit. Runs after
 add_phase4_charts.py (which rebuilds charts 1-19 from the pre-phase-4 base).
 
-  chart 6  Fig5_Capture   Germany capture vs base   -> rows 2..12  (11 techs)
-  chart 12 Fig5_Capture   Portugal capture vs base  -> rows 2..8   (7 techs)
-  chart 9  Fig9_Capacity  Germany installed capacity-> rows 2..12  (11 techs)
-  chart 8  Fig7_GenMix    Portugal intraday mix     -> drop the non-curated series
+  chart 6  Fig5_Capture   Germany capture vs base    -> the DE row block (11 techs)
+  chart 12 Fig5_Capture   Portugal capture vs base   -> the PT row block (7 techs)
+  chart 9  Fig9_Capacity  Germany installed capacity -> the DE row block (11 techs)
+  chart 8  Fig7_GenMix    Portugal intraday mix      -> drop the non-curated series
 
-Row ranges work because cfg.TECH_DISPLAY_ORDER puts each country's set in a
-CONTIGUOUS block at the top of the capture/capacity CSVs (see config.py).
+Row ranges come from cfg.tech_block_start()/tech_keep(): each country gets its own
+STACKED, CONTIGUOUS block of rows in the capture/capacity CSVs, so every chart can
+keep the note's exact technology ordering (an Excel series reads one range).
 """
 from __future__ import annotations
 
@@ -26,12 +27,8 @@ CSVDIR = os.path.join(cfg.OUTPUT_DIR, "csv", "charts")
 
 C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 
-# chart number -> number of technology rows to keep (categories)
-ROW_CHARTS = {
-    6:  len(cfg.tech_keep("DE")),
-    12: len(cfg.tech_keep("PT")),
-    9:  len(cfg.tech_keep("DE")),
-}
+# chart number -> the country whose row block it plots
+ROW_CHARTS = {6: "DE", 12: "PT", 9: "DE"}
 
 
 def colnum(letters: str) -> int:
@@ -41,11 +38,11 @@ def colnum(letters: str) -> int:
     return n
 
 
-def narrow_rows(xml: str, keep: int) -> str:
-    """Clamp every $2:$N range to $2:$(keep+1) and truncate the cached points."""
+def narrow_rows(xml: str, start: int, keep: int) -> str:
+    """Point every range at this country's block and truncate the cached points."""
     def fix_ref(m):
-        return f"{m.group(1)}$2:{m.group(2)}${keep + 1}"
-    xml = re.sub(r"(\$[A-Z]+)\$2:(\$[A-Z]+)\$\d+", fix_ref, xml)
+        return f"{m.group(1)}${start}:{m.group(2)}${start + keep - 1}"
+    xml = re.sub(r"(\$[A-Z]+)\$\d+:(\$[A-Z]+)\$\d+", fix_ref, xml)
 
     # ptCount + drop cached points beyond the new range
     xml = re.sub(r'<c:ptCount val="\d+"/>', f'<c:ptCount val="{keep}"/>', xml)
@@ -64,7 +61,7 @@ def narrow_rows(xml: str, keep: int) -> str:
     return xml
 
 
-def refresh_caches(xml: str, csv_path: str, keep: int) -> str:
+def refresh_caches(xml: str, csv_path: str, start: int, keep: int) -> str:
     """Rewrite the cached categories/values from the CSV.
 
     The chart caches are what Excel draws BEFORE the first Power Query refresh, so
@@ -73,7 +70,8 @@ def refresh_caches(xml: str, csv_path: str, keep: int) -> str:
     """
     rows = list(csv.reader(open(csv_path)))
     header, body = rows[0], rows[1:]
-    labels = [r[0] for r in body[:keep]]
+    block = body[start - 2:start - 2 + keep]     # start is a 1-based sheet row
+    labels = [r[0] for r in block]
 
     def cat_pts(m):
         pts = "".join(f'<c:pt idx="{i}"><c:v>{l.replace("&", "&amp;")}</c:v></c:pt>'
@@ -92,7 +90,7 @@ def refresh_caches(xml: str, csv_path: str, keep: int) -> str:
         if v:
             ci = colnum(v.group(1)) - 1
             vals = []
-            for i, r in enumerate(body[:keep]):
+            for i, r in enumerate(block):
                 cell = r[ci] if ci < len(r) else ""
                 if cell not in ("", None):
                     vals.append(f'<c:pt idx="{i}"><c:v>{cell}</c:v></c:pt>')
@@ -131,12 +129,15 @@ def main():
     zin.close()
 
     CSV_FOR = {6: "fig5_capture_pct", 12: "fig5_capture_pct", 9: "fig9_capacity"}
-    for no, keep in ROW_CHARTS.items():
+    for no, country in ROW_CHARTS.items():
+        keep = len(cfg.tech_keep(country))
+        start = cfg.tech_block_start(country)
         p = f"xl/charts/chart{no}.xml"
-        xml = narrow_rows(parts[p].decode(), keep)
-        xml = refresh_caches(xml, os.path.join(CSVDIR, CSV_FOR[no] + ".csv"), keep)
+        xml = narrow_rows(parts[p].decode(), start, keep)
+        xml = refresh_caches(xml, os.path.join(CSVDIR, CSV_FOR[no] + ".csv"), start, keep)
         parts[p] = xml.encode()
-        print(f"  chart{no:<3d} -> {keep} technology categories (rows 2..{keep+1})")
+        print(f"  chart{no:<3d} {country} block -> {keep} technologies "
+              f"(rows {start}..{start+keep-1})")
 
     hdr = next(csv.reader(open(os.path.join(CSVDIR, "fig7_gen_mix.csv"))))
     p = "xl/charts/chart8.xml"

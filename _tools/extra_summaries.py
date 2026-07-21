@@ -52,9 +52,14 @@ def _save(df, name):
 
 # ---------------------------------------------------------------- G1
 def g1(df):
-    # peak solar hour per (country, date): row where gen_Solar is maximal
-    idx = df.groupby(["country", "date"])["gen_Solar"].idxmax()
-    pk = df.loc[idx, ["country", "date", "gen_Solar", "gen_total"]].copy()
+    # peak solar hour per (country, date): row where gen_Solar is maximal.
+    # Drop rows with no solar reading FIRST: a country-day that is entirely NA
+    # (an ENTSO-E publication gap, or the partial current day) makes idxmax raise
+    # "encountered all NA values in a group" and takes the whole refresh down.
+    # Such a day simply has no peak-solar hour, so it should be absent, not fatal.
+    solar = df.dropna(subset=["gen_Solar"])
+    idx = solar.groupby(["country", "date"])["gen_Solar"].idxmax()
+    pk = solar.loc[idx, ["country", "date", "gen_Solar", "gen_total"]].copy()
     pk["share"] = (pk["gen_Solar"] / pk["gen_total"] * 100).clip(lower=0)
     wide = pk.pivot(index="date", columns="country", values="share")
     full = pd.date_range("2019-01-01", f"{cfg.DISPLAY_END_YEAR}-12-31", freq="D", tz="UTC")

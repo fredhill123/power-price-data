@@ -17,7 +17,7 @@ Writes: outputs/deck_charts/*.png
 from __future__ import annotations
 import os, sys, warnings; warnings.filterwarnings("ignore")
 import numpy as np, pandas as pd
-sys.path.insert(0, "/Users/fredhill/.claude/skills/chart-style")
+# chartstyle is VENDORED into _tools/ so CI (and any machine) can render without the skill
 import chartstyle as cs
 import config as cfg
 import charts as ch                     # reuse load(), year_colors(), footer(), TECH_COLORS

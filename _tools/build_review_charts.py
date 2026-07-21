@@ -11,7 +11,7 @@ House style via the chart-style skill (chartstyle).
 from __future__ import annotations
 import os, sys, warnings; warnings.filterwarnings("ignore")
 import numpy as np, pandas as pd
-sys.path.insert(0, "/Users/fredhill/.claude/skills/chart-style")
+# chartstyle is VENDORED into _tools/ (see chartstyle.py) so CI can render too
 import chartstyle as cs
 sys.path.insert(0, os.path.dirname(__file__))
 import config as cfg

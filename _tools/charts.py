@@ -13,7 +13,7 @@ import os, sys, warnings; warnings.filterwarnings("ignore")
 import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
-sys.path.insert(0, "/Users/fredhill/.claude/skills/chart-style")
+# chartstyle is VENDORED into _tools/ (see chartstyle.py) so CI can render too
 import chartstyle as cs
 import config as cfg
 

@@ -11,7 +11,7 @@ Uses the house chart-style library.
 from __future__ import annotations
 import os, sys
 import pandas as pd
-sys.path.insert(0, "/Users/fredhill/.claude/skills/chart-style")
+# chartstyle is VENDORED into _tools/ (see chartstyle.py) so CI can render too
 import chartstyle as cs
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

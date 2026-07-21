@@ -43,12 +43,15 @@ def main():
     # static path (fresh data)
     run("render_all.py")
     run("build_static_deck.py", os.path.join(OUT, "HourlyPowerData_snapshot.pptx"))
-    run("build_frozen_excel.py", os.path.join(OUT, "HourlyPowerData.xlsx"), os.path.join(OUT, "HourlyPowerData_frozen.xlsx"))
     # linked path (rebuild workbook + deck)
     run("add_phase4_charts.py")
     run("curate_tech_charts.py")    # curated technology sets (note Figs 5/47, 50, 7)
     run("add_status_sheet.py")      # staleness banner (workbook opens on it)
     run("add_power_queries.py")     # re-injects the 6 PQ connections add_phase4 rebuilds over
+    # AFTER the linked workbook exists — it is the source the frozen copy is made from.
+    # Running it earlier meant consuming the PREVIOUS run's workbook (and failing outright
+    # on a clean checkout, e.g. in CI).
+    run("build_frozen_excel.py", os.path.join(OUT, "HourlyPowerData.xlsx"), os.path.join(OUT, "HourlyPowerData_frozen.xlsx"))
     run("build_deck.py", TEMPLATE, os.path.join(OUT, "HourlyPowerData.xlsx"), os.path.join(OUT, "HourlyPowerData.pptx"))
     # guard
     run("check_consistency.py")

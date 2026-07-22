@@ -88,14 +88,23 @@ def load_csv(stem):
             kinds.append("date_text")       # keep as text: charts cache these as strRef
         elif all(re.fullmatch(r"-?\d+", v) for v in vals):
             kinds.append("int")
-        else:
+        elif all(re.fullmatch(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?", v) for v in vals):
             kinds.append("number")
+        else:
+            # Genuine text (fig5_capture_pct's 'technology' column). Until 2026-07-22 this
+            # fell through to "number", which wrote the label into a numeric <v> unescaped —
+            # "Oil & other fossil" then made the whole sheet malformed XML and Excel offered
+            # to Recover the workbook. Only ever surfaced once a text column was resynced.
+            kinds.append("text")
     return header, body, kinds
 
 
 # ---------------------------------------------------------------------------
 # worksheet cells
 # ---------------------------------------------------------------------------
+_NUMERIC = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
+
+
 def sheet_data_xml(header, body, kinds):
     out = ["<sheetData>"]
     cells = "".join(
@@ -109,7 +118,9 @@ def sheet_data_xml(header, body, kinds):
             if v == "":
                 continue                                   # leave the cell empty
             ref = f"{col_letter(i+1)}{ri}"
-            if kind in ("int", "number"):
+            # belt-and-braces: a value that is not actually numeric must never reach a bare
+            # <v>, whatever the column was classified as — that is what corrupts the part.
+            if kind in ("int", "number") and _NUMERIC.fullmatch(v):
                 cs.append(f'<c r="{ref}"><v>{v}</v></c>')
             else:
                 cs.append(f'<c r="{ref}" t="inlineStr"><is><t>{esc(v)}</t></is></c>')

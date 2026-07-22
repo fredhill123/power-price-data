@@ -280,7 +280,30 @@ _sy = LCY - FIG67_BASE_YEAR
 if _sy:
     parts["xl/charts/chart7.xml"] = repoint_year("xl/charts/chart7.xml", "Fig6_MinMax", _sy * 1)
     parts["xl/charts/chart8.xml"] = repoint_year("xl/charts/chart8.xml", "Fig7_GenMix", _sy * 20)
-    print(f"repointed Fig6/Fig7 {FIG67_BASE_YEAR}->{LCY}")
+
+    # The DATA moved to LCY above; the human-readable year has to move with it, or the
+    # workbook shows LCY figures under a base-year caption. Two places carry it:
+    #   1. the Charts-tab captions for Fig 6 / Fig 7, inherited from the base workbook
+    #   2. chart7's single series name ("DE 2024"), a literal with no cell behind it
+    # Both were still on FIG67_BASE_YEAR until 2026-07-22.
+    _s14 = parts["xl/worksheets/sheet14.xml"].decode()
+    _before = _s14
+    for _cap in ("Daily minimum vs maximum price (Germany, ",
+                 "Intraday generation mix and price (Portugal, "):
+        _s14 = _s14.replace(f"{_cap}{FIG67_BASE_YEAR})", f"{_cap}{LCY})")
+    if _s14 == _before:
+        raise SystemExit(f"!! Fig6/Fig7 captions not found at {FIG67_BASE_YEAR} on the Charts "
+                         f"tab — the base workbook's wording changed. Fix this mapping rather "
+                         f"than shipping charts whose caption year contradicts their data.")
+    parts["xl/worksheets/sheet14.xml"] = _s14.encode()
+
+    _c7 = parts["xl/charts/chart7.xml"].decode()
+    _c7, _n7 = re.subn(rf">DE {FIG67_BASE_YEAR}<", f">DE {LCY}<", _c7)
+    if not _n7:
+        raise SystemExit(f"!! chart7's series name is no longer 'DE {FIG67_BASE_YEAR}' — "
+                         f"check what it is before assuming the year rolled.")
+    parts["xl/charts/chart7.xml"] = _c7.encode()
+    print(f"repointed Fig6/Fig7 {FIG67_BASE_YEAR}->{LCY} (data, captions and series name)")
 
 # --- label the partial (current) year "YTD" in profile charts, matching the static path ---
 def relabel_ytd(key):

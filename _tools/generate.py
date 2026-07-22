@@ -48,6 +48,7 @@ def main():
     run("curate_tech_charts.py")    # curated technology sets (note Figs 5/47, 50, 7)
     run("add_status_sheet.py")      # staleness banner (workbook opens on it)
     run("add_power_queries.py")     # re-injects the 6 PQ connections add_phase4 rebuilds over
+    run("resync_prefill.py")        # cached data == CSV, so no table changes shape on refresh
     # AFTER the linked workbook exists — it is the source the frozen copy is made from.
     # Running it earlier meant consuming the PREVIOUS run's workbook (and failing outright
     # on a clean checkout, e.g. in CI).

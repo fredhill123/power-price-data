@@ -23,7 +23,17 @@
 # To take upgrades deliberately: bump one line, run the workflow by hand from the Actions
 # tab, confirm green, commit. Never bulk-upgrade and walk away.
 
-entsoe-py==0.8.0
+# BUMPED 2026-09-05, 0.8.0 -> 0.8.1, deliberately and by hand as the note above requires.
+# WHY. ENTSO-E cut the maximum query period from one year to one month (P1M) for several
+# exports around 2 Sep 2026 and did not update its documentation, which still says a year.
+# entsoe-py chunks those calls with @year_limited, so every load (A65), generation (A75) and
+# flow (A11) request this pipeline makes was rejected with HTTP 400. The 2 Sep run and a
+# 5 Sep re-run both failed on all five ENTSO-E markets; GB was unaffected because it fetches
+# from Elexon and the ECB. Upstream added a month_limited decorator in two commits on
+# 2026-09-04 (issues #546 and #547) and released 0.8.1 the same day.
+# ⚠ The maintainer applied it only to the methods reported so far: "as there is no definitive
+# list of what is impacted I will just fix decorators when reported." Flows may still fail.
+entsoe-py==0.8.1
 
 pandas==3.0.5
 pyarrow==25.0.0

@@ -204,7 +204,15 @@ TECH_MAP = {
     "Solar":                              "Solar",
     "Wind Onshore":                       "Onshore wind",
     "Wind Offshore":                      "Offshore wind",
+    # BOTH SPELLINGS, 2026-09-05. entsoe-py 0.8.1 corrected its own typo, "poundage" ->
+    # "pondage" (their issue #540). Under 0.8.0 only the misspelt key existed, so this map
+    # matched; under 0.8.1 it silently stopped matching and run-of-river vanished from every
+    # newly fetched month while older stored months kept it. The coverage guard caught it:
+    # 92 populated months -> 84 on capture_monthly.csv, all five ENTSO-E markets, 2026-01 to
+    # 2026-08. Keep the old key too: fetch_uk.py emits it deliberately for GB, and the stored
+    # history was fetched under the old spelling.
     "Hydro Run-of-river and poundage":    "Hydro run-of-river",
+    "Hydro Run-of-river and pondage":     "Hydro run-of-river",
     "Hydro Water Reservoir":              "Hydro reservoir",
     "Hydro Pumped Storage":               "Hydro pumped (production)",  # Actual Aggregated
     "Nuclear":                            "Nuclear",

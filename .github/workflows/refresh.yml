@@ -113,41 +113,56 @@ jobs:
       - name: Labels config.py maps still exist upstream
         working-directory: _tools
         run: python check_label_drift.py
-      # A FALLBACK STORE, NOT AN OPTIMISATION (restored 2026-08-23, Fred's call). Read the
-      # history before touching this, because the cache was deliberately REMOVED on
-      # 2026-08-03 and the reason still stands.
+      # A FALLBACK STORE, NOT AN OPTIMISATION (restored 2026-08-23, Fred's call; moved OFF
+      # the Actions cache 2026-09-06). Read the history before touching this, because the
+      # cache was deliberately REMOVED on 2026-08-03 and that reason still stands.
       #
-      # WHAT WENT WRONG WITH THE OLD ONE. It made the fetch incremental, and its safety
-      # depended on a coincidence: GitHub evicts a cache after about seven days unused, so
-      # under a monthly schedule it was always cold and every run rebuilt the year from
-      # ENTSO-E. That was a free self-repair, replacing any stored file that had gone bad,
-      # and nobody designed it — it fell out of runs being further apart than the cache
-      # lifetime. Four runs a month keeps it warm and the repair silently stops.
+      # WHAT WENT WRONG WITH THE FIRST ONE. It made the fetch incremental, and its safety
+      # rested on a coincidence: GitHub evicts an Actions cache after about seven days
+      # unused, so under a monthly schedule it was always cold and every run rebuilt the
+      # year from ENTSO-E. That was a free self-repair nobody designed. Four runs a month
+      # would have kept it warm and silently ended the repair.
       #
-      # WHY IT IS BACK, AND WHY THE REPAIR SURVIVES. On 18 August ENTSO-E returned 504 for
-      # the German generation pull. With nothing stored there was nothing to fall back on,
-      # the year came out empty, a chart lost a series, the build aborted, and the pipeline
-      # published nothing for eight days. The cache is now a SAFETY NET rather than a
-      # shortcut, and the difference is in fetch.py, not here:
+      # WHY IT CAME BACK. On 18 August ENTSO-E returned 504 for the German generation pull.
+      # With nothing stored there was nothing to fall back on, a chart lost a series, the
+      # build aborted, and the pipeline published nothing for eight days.
       #
-      #   * every run still pulls the full year with --force, so a series that fetches
-      #     SUCCESSFULLY overwrites what is stored — the self-repair is untouched;
+      # WHY IT IS NO LONGER AN ACTIONS CACHE, and this is the correction. That same seven-day
+      # eviction makes the store EMPTY EXACTLY WHEN A SCHEDULED RUN NEEDS IT, because the
+      # runs are eight days apart. It is not a near miss and it is not theoretical: the
+      # 2 September run logged "no stored data for PT 2026 — FULL fetch" for every ENTSO-E
+      # market. The last good run had been 26 Aug 11:03, seven days and one hour earlier,
+      # and GitHub had queued the 07:23 cron until 12:09. So the safety net's availability
+      # depended on the runner queue, and on the day it mattered it lost by an hour.
+      #
+      # A RELEASE ASSET INSTEAD. Release assets do not expire, do not enter git history (so
+      # the repository does not grow: --clobber replaces), cost nothing on a public repo,
+      # and need no account, secret or service beyond the GITHUB_TOKEN this job already
+      # holds. That last point is the one that matters for handover: nothing here can lapse
+      # while nobody is looking, which is the same argument that put the failure alert in a
+      # GitHub issue rather than an email.
+      #
+      # The self-repair is untouched, and it lives in fetch.py rather than here:
+      #   * every run re-fetches, so a series that fetches SUCCESSFULLY overwrites the store;
       #   * only a series whose fetch FAILED may lean on the stored copy;
-      #   * and only while that copy is inside FALLBACK_DAYS (8, one whole slot gap).
-      #     Past that the run fails rather than publishing old numbers as current.
-      #
-      # So a warm cache can no longer stop the repair: it is consulted only where the
-      # network already refused to answer.
+      #   * and only while that copy is inside FALLBACK_DAYS. Past that the run fails rather
+      #     than publishing old numbers as current.
       - name: Restore the fallback store for ${{ matrix.country }}
-        uses: actions/cache@v4
-        with:
-          path: data/raw
-          # A run-unique key never hits, so the post step always saves a fresh copy, and
-          # restore-keys picks up the newest previous one. A fixed key would freeze the
-          # store at whatever the first run wrote.
-          key: raw-${{ matrix.country }}-${{ github.run_id }}
-          restore-keys: |
-            raw-${{ matrix.country }}-
+        run: |
+          mkdir -p data/raw _store
+          # Never fatal. No store yet, a deleted release, a network blip: all of them mean
+          # "fetch the whole year", which is exactly what fetch.py does when it finds
+          # nothing to merge into. A cold start must not be an outage.
+          if gh release download "$STORE_TAG" --pattern "raw-${{ matrix.country }}.tar.gz" \
+               --dir _store --clobber 2>/dev/null; then
+            tar -xzf "_store/raw-${{ matrix.country }}.tar.gz" -C data/raw
+            echo "restored $(ls data/raw | wc -l) stored file(s) for ${{ matrix.country }}"
+          else
+            echo "no stored copy for ${{ matrix.country }} yet — this run fetches the full year"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STORE_TAG: raw-store
       - name: Fetch ${{ matrix.country }} (current year, plus the prior year at rollover)
         env:
           ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
@@ -260,6 +275,37 @@ jobs:
               echo "first pass had gaps; the second pass is the one that decides"
             python fetch.py --country ${{ matrix.country }} --years $YEAR   # fills 503 gaps
           fi
+      # SAVE THE STORE, and do it even when the fetch FAILED. The Actions cache this
+      # replaced skipped its post step on a failed job, so a run where four series came
+      # back and one did not stored nothing at all, and the four good ones were re-fetched
+      # from scratch next time. `always()` keeps whatever did work, which is the entire
+      # point of a fallback store.
+      #
+      # Never fatal either. A failed upload must not turn a good run red: the store is a
+      # convenience for the NEXT run, and the worst case without it is a full-year fetch.
+      - name: Save the fallback store for ${{ matrix.country }}
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STORE_TAG: raw-store
+        run: |
+          if [ -z "$(ls -A data/raw 2>/dev/null)" ]; then
+            echo "nothing fetched or restored — leaving the stored copy alone"
+            exit 0
+          fi
+          # Six country jobs run in parallel and all six may find the tag missing on the
+          # very first run. Losing that race is fine: --clobber below writes the asset
+          # either way, and the assets are named per country so they never collide.
+          gh release view "$STORE_TAG" >/dev/null 2>&1 || \
+            gh release create "$STORE_TAG" --prerelease \
+              --title "Raw fetch fallback store (machine-managed)" \
+              --notes "Working files for .github/workflows/refresh.yml. Each asset is the raw ENTSO-E or Elexon parquet for one market, replaced on every run. Not a release of anything: it exists because an Actions cache expires after 7 days and the schedule runs every 8, so the fallback store was empty exactly when a failing run needed it. Public ENTSO-E and Elexon data, nothing derived." \
+              2>/dev/null || true
+          tar -czf "raw-${{ matrix.country }}.tar.gz" -C data/raw .
+          ls -lh "raw-${{ matrix.country }}.tar.gz"
+          gh release upload "$STORE_TAG" "raw-${{ matrix.country }}.tar.gz" --clobber \
+            || echo "store upload failed; the next run just fetches the full year"
+          rm -f "raw-${{ matrix.country }}.tar.gz"
       - uses: actions/upload-artifact@v4
         with:
           name: raw-${{ matrix.country }}
@@ -314,12 +360,24 @@ jobs:
       # Safe to cache because a COMPLETED year never changes: a reservoir level for a week
       # in 2015 is a settled historical fact. fetch_hydro forces the CURRENT year on every
       # run regardless of what is cached, so the open year can never go stale here.
+      #
+      # AND IT DID NOT WORK (found 2026-09-06). Same seven-day eviction against an eight-day
+      # cadence as the raw store, so a scheduled run found it cold and paid the 21 minutes
+      # anyway; and both surviving hydro entries in the cache list measured 0 MB, so the
+      # glob path was storing nothing even when it did hit. Moved to the same release asset
+      # the raw store now uses, which neither expires nor depends on a glob.
       - name: Restore the settled hydro years
-        uses: actions/cache@v4
-        with:
-          path: data/raw/hydro_*.parquet
-          key: hydro-${{ github.run_id }}
-          restore-keys: hydro-
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STORE_TAG: raw-store
+        run: |
+          mkdir -p data/raw _store
+          if gh release download "$STORE_TAG" --pattern "hydro.tar.gz" --dir _store --clobber 2>/dev/null; then
+            tar -xzf _store/hydro.tar.gz -C data/raw
+            echo "restored $(ls data/raw/hydro_*.parquet 2>/dev/null | wc -l) settled hydro year(s)"
+          else
+            echo "no stored hydro years yet — this run fetches all of them"
+          fi
       - name: Fetch the weekly hydro reservoir series
         env:
           ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
@@ -329,6 +387,24 @@ jobs:
           # per-country matrix above and never joins the hourly master. Fetched
           # concurrently, and a settled year that is already stored is skipped.
           python fetch_hydro.py
+      - name: Save the settled hydro years
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STORE_TAG: raw-store
+        run: |
+          if ! ls data/raw/hydro_*.parquet >/dev/null 2>&1; then
+            echo "no hydro files to store"; exit 0
+          fi
+          gh release view "$STORE_TAG" >/dev/null 2>&1 || \
+            gh release create "$STORE_TAG" --prerelease \
+              --title "Raw fetch fallback store (machine-managed)" \
+              --notes "Working files for .github/workflows/refresh.yml." 2>/dev/null || true
+          tar -czf hydro.tar.gz -C data/raw $(cd data/raw && ls hydro_*.parquet)
+          ls -lh hydro.tar.gz
+          gh release upload "$STORE_TAG" hydro.tar.gz --clobber \
+            || echo "hydro store upload failed; the next run refetches the settled years"
+          rm -f hydro.tar.gz
 
       - name: Build + summarise + export
         working-directory: _tools

@@ -263,23 +263,35 @@ def main():
     check("without --only a stored series is still skipped", seen["generation"] == 0,
           f"{seen['generation']} call(s)")
 
-    # ---- THE TWO RULES MUST AGREE ----------------------------------------------------------
-    # FALLBACK_DAYS says how stale a stand-in series may be. check_coverage.py independently
-    # refuses to PUBLISH a column that lost more than both 3 cells and 2%. If the first is
-    # looser than the second, a fallback the fetch calls survivable dies at publish instead,
-    # and the reader is sent hunting through fetch logs for a coverage refusal. Measured
-    # 2026-08-23 with FALLBACK_DAYS at 8: 5 days already failed.
+    # ---- THE BOUND AND THE COVERAGE GUARD ---------------------------------------------------
+    # REWRITTEN 2026-09-06, because the model here was wrong and it drove a real decision.
+    #
+    # It compared a fallback column of `n - d` cells against a baseline of `n`: the previous
+    # publish CURRENT, this one falling back. On the strength of that, FALLBACK_DAYS was cut
+    # from 8 to 3 "because check_coverage would refuse anything older anyway".
+    #
+    # The pipeline cannot produce that pair. check_coverage's baseline is the PREVIOUS
+    # PUBLISH, and the fallback store is written by the same runs that publish, so a fallback
+    # republishes exactly what the baseline already held. Three days is shorter than the
+    # 8-day gap between scheduled runs, so the cut made the mechanism unreachable: no
+    # scheduled run could ever find a stored copy inside its own bound. Together with the
+    # Actions cache expiring at 7 days, that is why the fallback had never once fired.
     import check_coverage as cc
     d = fetch.FALLBACK_DAYS
-    # Daily-resolution columns, at every size a year can be. The guard needs a drop STRICTLY
-    # greater than 3 before it even looks at the percentage, which is what makes a 3-day
-    # fallback safe in January as well as in December.
-    daily_ok = all(not cc.shrank(n - d, n) for n in (20, 50, 100, 235, 366))
-    check("a full-bound fallback publishes on every daily column size", daily_ok,
-          f"FALLBACK_DAYS={d}, tolerance {cc.TOLERANCE_ABS} cells / {cc.TOLERANCE_PCT}%")
-    # The one long hourly feed (g1_solar_peakhour, ~6,200 rows).
-    check("and on the long hourly feed", not cc.shrank(6209 - d * 24, 6209),
-          f"{d * 24} rows of 6209")
+    check("a fallback republishing the baseline does not read as a shrink",
+          all(not cc.shrank(n, n) for n in (20, 50, 100, 235, 366)),
+          f"tolerance {cc.TOLERANCE_ABS} cells / {cc.TOLERANCE_PCT}%")
+    # The gain case: the previous run fetched fine and died later in the build, so the store
+    # is NEWER than the last publish. More cells than the baseline is never a shrink.
+    check("and a store ahead of the baseline is not a shrink either",
+          all(not cc.shrank(n + d, n) for n in (20, 100, 366)))
+    # THE BOUND MUST COVER ONE SLOT GAP or the store is decorative. Runs are on the 2nd,
+    # 10th, 18th and 26th: gaps of 8, 8, 8, then 7 at the month wrap.
+    check("the bound covers the largest gap between scheduled runs", d >= 8,
+          f"FALLBACK_DAYS={d}, largest scheduled gap 8 days")
+    # But it must not be open-ended: a month-old series presented as current is the thing the
+    # bound exists to prevent, and check_month_arrived is what catches a stale month.
+    check("and is still a bound, not a licence", d <= 14, f"FALLBACK_DAYS={d}")
 
     print("\n" + ("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}"))
     return 1 if FAILS else 0

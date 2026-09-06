@@ -187,29 +187,46 @@ TRANSIENT_STATUS = (500, 502, 503, 504, 408, 429)
 RETRIES = 4
 RETRY_WAIT = 20      # seconds, doubling
 
-# HOW STALE A FALLBACK MAY BE (Fred's call, 2026-08-23). When a required series cannot be
-# fetched, the run may use what is already stored rather than publishing nothing — but only
-# for a bounded time, and only saying so.
+# HOW STALE A FALLBACK MAY BE (Fred's call, 2026-08-23; the number corrected 2026-09-06).
+# When a required series cannot be fetched, the run may use what is already stored rather
+# than publishing nothing — but only for a bounded time, and only saying so.
 #
 # WHY THIS DOES NOT UNDO THE 2026-08-03 DECISION. That decision removed the raw cache so
-# every run re-pulls the whole year and any stored file that has gone bad is replaced. That
-# still holds: a series that fetches SUCCESSFULLY overwrites, exactly as before. Only a
-# series that FAILED leans on storage, and the bound caps how long it may.
+# every run re-pulls and any stored file that has gone bad is replaced. That still holds: a
+# series that fetches SUCCESSFULLY overwrites, exactly as before. Only a series that FAILED
+# leans on storage, and the bound caps how long it may.
 #
-# THE COVERAGE GUARD IS THE TIGHTER BOUND, AND IT DECIDES (measured 2026-08-23).
-# This was 8, on the reasoning that one whole slot gap is the natural limit. That number was
-# never reachable. check_coverage.py refuses to publish a column that lost more than BOTH 3
-# cells AND 2% of what it had, and on a daily-resolution column in late August 2% is about
-# 4.7 cells — so a 5-day-old fallback is REFUSED at publish and an 8-day one never had a
-# chance. Documenting 8 as the bound would have sent someone hunting through the fetch logs
-# for a failure that was actually a publish-time coverage refusal.
+# THIS WAS 3, AND 3 MADE THE MECHANISM UNREACHABLE. The reasoning for it, on 2026-08-23, was
+# that check_coverage would refuse anything older at publish, so a looser bound would send
+# someone hunting through fetch logs for what was really a coverage refusal. The measurement
+# behind that compared a fallback column of `n - d` cells against a baseline of `n`, i.e. it
+# assumed the previous publish was CURRENT while this one falls back.
 #
-# Three is chosen because it is provably inside the guard at every time of year, which no
-# larger number is: a 3-day-behind daily column loses exactly 3 cells, and the guard needs
-# a drop STRICTLY GREATER than 3 before the percentage is even consulted. That floor is what
-# saves January, when 2% of a year barely started is a single cell. On the long hourly feeds
-# 3 days is ~72 rows of 6,200, which is under the 2% as well.
-FALLBACK_DAYS = 3
+# THE PIPELINE CANNOT PRODUCE THAT PAIR. check_coverage's baseline is the previous publish,
+# and the store is written by the same runs that publish, so the store's age and the
+# baseline's age move together:
+#
+#   * previous run published successfully -> the store holds that run's data, so a fallback
+#     republishes exactly what the baseline already had. Equal, and shrank() is false.
+#   * previous run fell back for this series -> the store was not overwritten, but neither
+#     was the published column. Still equal.
+#   * previous run fetched fine and died later in the build -> the store is NEWER than the
+#     baseline, which is a gain, not a shrink.
+#
+# So the coverage guard is not the binding constraint and never was. With a 3-day bound and
+# runs 8 days apart, no scheduled run could ever have a stored copy inside the bound, which
+# is the second of the two reasons the fallback had never once fired. (The first was the
+# Actions cache expiring at 7 days; the store now lives in a release asset, which does not.)
+#
+# NINE, being one slot gap plus a day. The largest ordinary gap between runs is 8 days, so a
+# store written by the last successful run is at most 8 days old when the next one needs it;
+# the extra day absorbs GitHub queueing a scheduled run late, measured at up to 4h46m.
+#
+# The real limit on a fallback is not the shrink guard but check_month_arrived: on the run of
+# the 2nd, a series 8 days stale leaves the just-closed month incomplete, and that check fails
+# the run rather than publishing half a month. That is the correct outcome and it means the
+# bound cannot quietly paper over a month boundary.
+FALLBACK_DAYS = 9
 
 # Read by the repair workflow and published to the status page. Its PRESENCE is the
 # signal; there is no "all clear" file to go stale.

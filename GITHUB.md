@@ -310,6 +310,31 @@ stores it):
 Edit the `cron:` line in `.github/workflows/refresh.yml` (uses standard cron, UTC).
 
 ## If a run fails
-Open the failed run under **Actions** to see logs. Most failures are transient
-ENTSO-E 503s — just re-run. The workflow already does a second fetch pass to fill
-any gaps; a re-run fills the rest.
+
+**First read the "Can a re-run fix it?" line** at the top of the failure issue, or the same
+sentence on the status page. Since 2026-09-06 the pipeline classifies its own failures and
+there are two kinds, which want opposite responses:
+
+- **Transient** (a 5xx, a timeout). Re-run it, or do nothing: the repair job retries the
+  failed series the same day, and the next scheduled run is at most 8 days away.
+- **Not retryable** (a 4xx, a renamed label, a changed schema). The request itself is now
+  wrong, so every re-run fails identically. The repair job deliberately does not fire. Open
+  the run log, read the first red step, and expect to change code — most often the
+  `entsoe-py` pin in `requirements.txt`. This is what happened on 2 September 2026, when
+  ENTSO-E began refusing query windows longer than one month.
+
+## The fallback store (`raw-store` release)
+
+There is a **prerelease tagged `raw-store`** on this repository holding one gzipped tarball
+of raw parquet per market, plus the settled hydro years. It is machine-managed: every fetch
+job restores its own asset before fetching and replaces it afterwards, so a series ENTSO-E
+refuses can be published from the stored copy while `fetch.py` declares that it did.
+
+Do not delete it, and do not treat it as a release of anything. It is not in git history, so
+it costs the repository no size, and `--clobber` replaces rather than accumulates.
+
+It used to be a GitHub Actions cache. Those expire after seven days unused and the schedule
+runs every eight, so the store was empty at exactly the moment a failing run needed it, and
+had never once supplied a fallback. A release asset does not expire and needs nothing beyond
+the `GITHUB_TOKEN` the workflow already holds, which matters for handover: there is nothing
+here that can lapse while nobody is looking.

@@ -858,6 +858,17 @@ jobs:
               print("**RETRYING WILL NOT FIX THIS.** " + (h.get("stuck") or "")
                     + ". A 4xx, a schema change or a renamed upstream label needs a code "
                       "change. The repair run is deliberately not firing.")
+          elif not h.get("fatal") and not h.get("series"):
+              # NO FETCH GAP AT ALL, so the fetch worked and something after it stopped the
+              # run: a guard refusing to publish, the schema validator, a dead wheel. Until
+              # 2026-09-06 this fell through to "probably transient", which is wrong in a
+              # way that wastes the reader's time — they retry, it fails identically, and
+              # the actual message was in the log all along. The repair job already declines
+              # to fire here (its gate needs a named series), so the text now matches it.
+              print("The fetch worked — this stopped AFTER it, so a plain re-run repeats it. "
+                    "Read the first red step: most likely a guard refusing to publish "
+                    "(coverage, settled values, workbook queries), the Open XML validator, "
+                    "or `pip install`. The repair run is not firing, and should not.")
           else:
               print("Probably transient. The repair run later today retries automatically.")
           PY
@@ -890,7 +901,16 @@ jobs:
              2 September 2026.
           3. The coverage guard refused to publish because a feed lost data. That is the guard
              doing its job; the log names the file and the columns.
-          4. A pinned dependency has no wheel any more — the failure is at \`pip install\`.
+          4. The settled-value guard refused to publish because a number on a CLOSED month or
+             year MOVED. Nothing got shorter, so the coverage guard saw nothing; a figure
+             simply changed that should not have. The log names the file, the period and the
+             size of the move. Do not widen the tolerance to get past this — read the number.
+          5. The workbook guard refused to publish because one of the 24 CSVs the share-drive
+             workbook fetches on open would no longer be there, or was not produced by this
+             build. Publishing anyway gives whoever opens the workbook a query error or
+             silently stale figures. If the rename was deliberate, re-point the workbook's
+             query, re-export it and re-run \`extract_workbook_queries.py\`.
+          6. A pinned dependency has no wheel any more — the failure is at \`pip install\`.
 
           **If nobody is available to look at this,** it depends on which of the two it is, and
           the line at the top says which. A transient failure heals itself: the repair run

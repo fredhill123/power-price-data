@@ -108,6 +108,13 @@ def unit_suites():
     # the build makes 31 chart CSVs and the workbook queries 24, so a version that
     # complained about the other seven would be switched off within a week.
     run("check_workbook_queries_fixtures.py")
+    # THE JANUARY PATH, which gets one attempt a year. The rolling window advances, slot 8
+    # goes from a full year to a two-day one, and absorb_prior_year folds the finished year
+    # into the frozen history — a year that is otherwise dropped on the floor, being in
+    # neither the frozen history nor the freshly-fetched raw. check_coverage carries the
+    # most elaborate rollover logic here and had no fixture at all; absorb_prior_year
+    # landed 2026-07-21 and has never run in a January.
+    run("rollover_fixtures.py")
     # The public status page. Its own suite ran nowhere for a month while the page quietly
     # promised every visitor that a refresh takes "about 20 minutes", two to three times
     # short once Great Britain and the whole-year pull landed.

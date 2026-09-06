@@ -615,6 +615,23 @@ jobs:
           git fetch origin main
           python _tools/check_coverage.py --baseline origin/main
 
+      # AND THAT NO SETTLED NUMBER MOVED (2026-09-06). check_coverage above asks whether the
+      # data got shorter or blanker. Nothing asked whether it got DIFFERENT. Every guard in
+      # this pipeline passes on a file that is the right shape and holds the wrong numbers,
+      # which is how a 31-day "year" published twice on 2026-07-31 and how run-of-river left
+      # every market on 2026-09-05 with every job reporting success.
+      #
+      # A month or year that has closed should not move. Tolerances are measured, not chosen:
+      # a cleared price does not get revised, generation is restated for weeks afterwards, so
+      # price feeds are held to 0.5% and generation-derived ones to 8%. Replayed over all 50
+      # published transitions in this repository's history: silent on 46, and it speaks on
+      # d4bdc58, one of the two commits documented as having shipped bad data.
+      #
+      # Runs AFTER the coverage guard because that one is cheaper and its message is simpler,
+      # so where both would fire the reader gets the plainer of the two first.
+      - name: Assert no settled value has changed
+        run: python _tools/check_value_stability.py --baseline origin/main
+
       - name: Commit published data
         run: |
           git config user.name  "power-price-bot"

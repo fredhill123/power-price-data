@@ -98,6 +98,10 @@ def unit_suites():
     run("fetch_uk_gaps_test.py")
     # A guard cannot notice that it has stopped guarding, which is what fixtures are for.
     run("check_reference_stability_fixtures.py")
+    # The value guard's own fixtures. It is the only check here that compares a NUMBER, and
+    # both of its failure directions are expensive: silence puts a wrong figure in a deck,
+    # noise trains someone to widen a tolerance until it means nothing.
+    run("check_value_stability_fixtures.py")
     # The public status page. Its own suite ran nowhere for a month while the page quietly
     # promised every visitor that a refresh takes "about 20 minutes", two to three times
     # short once Great Britain and the whole-year pull landed.
@@ -178,6 +182,9 @@ def main():
         # 2026-08-25, so a local --fresh run could and did overwrite the tracked baseline
         # with a month less data while every local check passed.
         run("check_coverage.py")
+        # And that nothing SETTLED moved. check_coverage asks whether the data got shorter;
+        # this asks whether it got different, which no other check here asks at all.
+        run("check_value_stability.py")
         # The legacy five and the "_extra" sixth come from different sources with
         # independent failure modes, so they can drift apart while both stay individually
         # valid. Nothing else compares them to each other.

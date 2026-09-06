@@ -169,6 +169,10 @@ def main():
         # caught nothing for a month because nothing invoked it, while the page quietly
         # promised every visitor a refresh would take "about 20 minutes" — a figure that
         # was two to three times short once Great Britain and the whole-year pull landed.
+        # The value check, so a local fresh build asks the same question CI does. Everything
+        # else in this list is structural; this one compares the built numbers against the
+        # published Redburn figures and against the data's own invariants.
+        run("validate.py")
         run("check_reference_stability.py")
         # And refuse to publish a SHORTER series. check_coverage ran only in CI until
         # 2026-08-25, so a local --fresh run could and did overwrite the tracked baseline

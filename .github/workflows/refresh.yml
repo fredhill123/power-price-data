@@ -339,6 +339,25 @@ jobs:
           python build_hourly.py --absorb-prior-year
           python build_hourly.py
           python summaries.py
+          # THE ONLY CHECK IN THIS PIPELINE THAT ASKS WHETHER A NUMBER IS RIGHT (wired in
+          # 2026-09-06). Everything else here is structural: the Open XML validator asks
+          # whether Excel will open the file, check_reference_stability whether a column
+          # moved, check_coverage whether anything got shorter, check_consistency whether
+          # the two decks agree. All of them pass on data that is the right shape and the
+          # wrong numbers, which is how a 31-day "year" published twice on 2026-07-31 and
+          # how run-of-river silently left every market on 2026-09-05.
+          #
+          # validate.py compares the built data against figures published in the Redburn
+          # appendix (Germany 2024 near-negative hours, average daily spread, solar and gas
+          # capture) plus two internal invariants. It existed from the start, INDEX.md
+          # listed it as part of the system, and NOTHING INVOKED IT. It also exited 0 on a
+          # FAIL until today, so wiring it in before that would have bought nothing.
+          #
+          # It gates, and gating is safe: every assertion is over settled years that come
+          # off the frozen history and are identical on every run, so a FAIL means a build
+          # changed a number that cannot legitimately change. It runs here rather than after
+          # the publish because the point is to stop the publish.
+          python validate.py
           python export_csv.py          # tidy/long CSVs
           python chart_csv.py           # chart-ready wide CSVs (what Excel loads)
           # extra_summaries AFTER chart_csv: its line_windows step READS the fig2/fig3/

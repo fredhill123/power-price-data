@@ -76,5 +76,23 @@ def main():
     npass = sum(1 for ok, _, _ in results if ok)
     print(f"\n==== {npass}/{len(results)} checks passed ====")
 
+    # AND FAIL THE RUN, which until 2026-09-06 it did not (found by the commissioned review of
+    # the unattended setup that day). This is the only file in the repository that asks whether
+    # a NUMBER is right rather than whether the shape is right, and it printed FAIL and exited 0,
+    # so wiring it into CI would have bought nothing. It was also wired into nothing: neither the
+    # workflow nor generate.py invoked it, while INDEX.md listed it as part of the system. Two
+    # faults of the same shape as the ones already fixed here twice.
+    #
+    # Gating is safe because every assertion is over SETTLED data — Germany and Italy in 2024 —
+    # which comes off the frozen history and is identical on every run. A FAIL here means a
+    # build changed a number that cannot legitimately change.
+    if npass != len(results):
+        raise SystemExit(
+            f"validate: {len(results) - npass} check(s) FAILED. These compare the built data "
+            f"against figures published in the Redburn appendix and against the data's own "
+            f"internal consistency, over years that are closed and cannot legitimately move. "
+            f"Do not relax a threshold to make this pass without establishing why the number "
+            f"changed.")
+
 if __name__ == "__main__":
     main()

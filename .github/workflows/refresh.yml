@@ -106,6 +106,13 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install -r requirements.txt
+      # BEFORE fetching, not after. A label entsoe-py has renamed drops its series
+      # silently while every job still reports success: that is how run-of-river
+      # vanished from eight months of 2026 on 2026-09-05 and only the publish-time
+      # coverage guard noticed. One second here beats an hour of fetching into a hole.
+      - name: Labels config.py maps still exist upstream
+        working-directory: _tools
+        run: python check_label_drift.py
       # A FALLBACK STORE, NOT AN OPTIMISATION (restored 2026-08-23, Fred's call). Read the
       # history before touching this, because the cache was deliberately REMOVED on
       # 2026-08-03 and the reason still stands.

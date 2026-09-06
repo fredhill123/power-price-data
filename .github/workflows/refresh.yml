@@ -908,8 +908,8 @@ jobs:
           5. The workbook guard refused to publish because one of the 24 CSVs the share-drive
              workbook fetches on open would no longer be there, or was not produced by this
              build. Publishing anyway gives whoever opens the workbook a query error or
-             silently stale figures. If the rename was deliberate, re-point the workbook's
-             query, re-export it and re-run \`extract_workbook_queries.py\`.
+             silently stale figures. If the rename was deliberate, re-point the query in
+             the workbook, re-export it and re-run \`extract_workbook_queries.py\`.
           6. A pinned dependency has no wheel any more — the failure is at \`pip install\`.
 
           **If nobody is available to look at this,** it depends on which of the two it is, and

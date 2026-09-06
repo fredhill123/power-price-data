@@ -26,7 +26,9 @@ Italy), 2019 → present, from the ENTSO-E Transparency Platform.
 - **Python env:** `_tools/.venv` (activate with `source _tools/.venv/bin/activate`, run
   everything from inside `_tools/`)
 - **API key:** `_tools/.entsoe_key` locally; `ENTSOE_API_KEY` GitHub secret in CI. Never hardcode it.
-- **Monthly automation:** `.github/workflows/refresh.yml`, **07:23 UTC on the 2nd** — fetches the
+- **Automation:** `.github/workflows/refresh.yml`, **07:23 UTC on the 2nd, 10th, 18th and 26th**
+  (four fixed dates a month since 2026-08-03; the run on the 2nd is the one that lands the
+  just-closed month) — fetches the
   current year, rebuilds the chart CSVs, validates the packages on a Windows runner, checks that
   no published feed has shrunk, and only then commits to `published/charts/`.
   ⚠ At the January rollover the coverage guard reads the window slot labels from
@@ -166,12 +168,19 @@ Expect `HTTP/2 200`.
 ## 7. Hand over
 
 Send Fred the four files from `~/Downloads` (`HourlyPowerData.xlsx`, `HourlyPowerData.pptx`,
-`HourlyPowerData_frozen.xlsx`, `HourlyPowerData_snapshot.pptx`). He replaces the two live
-files in the shared Redburn folder:
+`HourlyPowerData_frozen.xlsx`, `HourlyPowerData_snapshot.pptx`).
+
+⚠️ **These are not drop-in replacements for the share copy.** The workbook in
 ```
 \\redburn.local\core\data\Oils\Oils 2.0\Power & Utilities Team Resources\Sector Presentation\
 ```
-and then does **File ▸ Info ▸ Edit Links to Files ▸ Update Now** in the deck.
+is the UpSlide-linked copy, and UpSlide matches its links by a hidden marker stamped into each
+chart rather than by file path. Overwriting it with a freshly generated file orphans every link
+in the deck. `_tools/merge_into_linked.py` is the route: it adds a build's new content to the
+linked workbook instead of replacing it, and `--dry-run` says whether a rebuild is due at all
+without changing anything. If the deck was linked by plain Paste Link rather than UpSlide, the
+old instruction holds: replace both files together and do **File ▸ Info ▸ Edit Links to Files
+▸ Update Now**.
 
 ---
 
@@ -185,5 +194,9 @@ and then does **File ▸ Info ▸ Edit Links to Files ▸ Update Now** in the de
 - **If Excel ever offers to "Recover" the workbook, decline.** Recovery strips Power Query.
   Send the file to be repaired at the XML level instead.
 - **Don't hand-edit `published/charts/*.csv`.** They are build outputs; CI overwrites them.
-- Fifteen of the nineteen charts carry one series per year, so a new year only ever appears
-  via a `generate.py` rebuild — never via a Power Query refresh alone.
+- **A new year no longer needs a rebuild to appear in a chart** (corrected 2026-09-06). This
+  line used to say the opposite, and it was true until the rolling window landed: all nineteen
+  charts now read fixed `w1..w7` columns whose contents and series names roll, so the new
+  complete year arrives on an ordinary Power Query refresh. `add_status_sheet.py` dropped the
+  ANNUAL ROLLOVER OVERDUE alarm on 2026-08-03 for the same reason. What still needs the steps
+  above is the FROZEN HISTORY, which is a CI-side job and nothing to do with the workbook.

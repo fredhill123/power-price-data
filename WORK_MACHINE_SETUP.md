@@ -52,7 +52,7 @@ else follows from it.
 |  | Comes from | How you get it |
 |---|---|---|
 | **The numbers** | `published/` CSVs on GitHub | Automatically, on open. Never download anything. |
-| **The workbook itself** — which technologies a chart plots, how many year-series it has, tab order, the banner | The `.xlsx` file | Only by replacing the file from `deliverables/`. |
+| **The workbook itself** — which technologies a chart plots, tab order, captions, the banner | The `.xlsx` file | Only by rebuilding the file. Not by refreshing. |
 
 CI rebuilds **both** every run: it republishes the CSVs *and* builds a fresh
 `HourlyPowerData.xlsx` / `.pptx` into `deliverables/`. Your copy on the share picks up
@@ -68,33 +68,50 @@ range from `$A$2:$A$12` to `$A$2:$A$11`. A workbook built before that change sti
 only way to get the fix is to take the rebuilt file.
 
 **Rule of thumb:** if the numbers look wrong or old → refresh. If the *chart itself* is
-wrong — a missing year, an unwanted technology, a gap — → replace the file.
+wrong — an unwanted technology, a gap, a caption — → the file needs rebuilding. A missing
+*year* is no longer on that list; see the next section.
 
-### ⚠️ Once a year you MUST replace your workbook file. Refreshing is not enough.
+> ⚠️ **Do not replace the share copy by downloading `deliverables/HourlyPowerData.xlsx`**
+> if the deck is linked with **UpSlide**. UpSlide does not match its links by file path: it
+> stamps a hidden marker into each chart, so dropping a freshly generated workbook in place
+> orphans every link in the deck, whatever the new file is called or where it sits.
+> `_tools/merge_into_linked.py` exists for exactly this — it ADDS a fresh build's new content
+> to the linked workbook rather than replacing it. Before doing anything, ask whether a rebuild
+> is even due:
+> ```
+> python _tools/merge_into_linked.py --dry-run --base <the share copy> --donor <a fresh build>
+> ```
+> It changes nothing and exits 1 if the template is genuinely behind, 0 if it is not.
 
-This is the one genuine annual action, and it is easy to miss because everything else is automatic.
+### The year turn needs nothing from you (corrected 2026-09-06)
 
-**Why refreshing cannot do it.** Each year is a separate **chart series**, and the number of series
-is fixed when the workbook is built. Today's file carries seven — 2019 … 2025. The CSVs already
-contain 2026 (it is excluded on purpose: an incomplete year must never be plotted). When 2026
-completes, the chart needs an **eighth series**, and no refresh can add one — Power Query loads
-data into cells, it does not create series. So a refreshed 2026-vintage file will keep showing
-2019–2025 forever, with correct but visibly out-of-date charts.
+**This section used to say the opposite**, and until 2026-08-03 it was right. It told you that
+once a year you MUST replace the workbook file, and to watch the Status tab for an
+**ANNUAL ROLLOVER OVERDUE** banner. Both are now wrong, and the banner no longer exists:
+`add_status_sheet.py` stopped raising it because "every one of the nineteen charts now advances
+on an ordinary refresh, so there is no annual action to raise". Anyone following the old
+instruction would have replaced a workbook that did not need replacing, which for the UpSlide
+deck is the one action that breaks it (see below).
 
-**What to do, every January:**
-1. Open the workbook and read the **Status** tab.
-2. If it says **ANNUAL ROLLOVER OVERDUE — charts were built for YYYY**, that is this situation.
-3. Download the newest `HourlyPowerData.xlsx` **and** `.pptx` from `deliverables/` in the repo,
-   and replace both files on the network share (they must stay together — the deck links to the
-   workbook by path).
-4. Re-open. The Status tab should go green and the charts should show the new year.
+**Why it used to be true.** Each year was a separate **chart series**, and the number of series is
+fixed when a workbook is built. Power Query loads data into cells; it cannot create a series. So a
+2026-vintage file would have shown 2019 to 2025 for ever, however often it refreshed.
 
-The alarm is what tells you; you do not need to track the date yourself. And if the tab instead
-says nothing is wrong but the charts are missing a completed year, the January CI run failed —
-see `ROLLOVER.md`. That is the one failure with a real deadline: CI only ever fetches the current
-year, so a completed year never absorbed sits in neither the history nor the fetch. The Mac holds
-the full raw archive so it is always recoverable, but the longer it goes unnoticed the more the
-monthly-granularity charts show a visible 12-month hole.
+**What changed.** The charts were re-pointed at a **rolling window** instead of at fixed years.
+Every chart now reads the same `w1..w7` columns for ever, the build fills them from the last seven
+complete years, and each series takes its NAME from a Status-sheet cell, so the legend rolls with
+the data. `roll_year_window.py` did the annual bar charts, `roll_line_windows.py` the seven line
+charts and the two category charts, and `roll_single_year_charts.py` the last three, captions
+included. The trade Fred accepted is that an exhibit is now "the last seven complete years", so
+2019 drops off in 2027.
+
+**So every January, do nothing.** The new complete year appears on an ordinary refresh-on-open,
+with correct labels and no change in bar width.
+
+**What still has a real deadline** is on the CI side, not yours: the January run must fold the
+completed year into the frozen history, because CI only ever fetches the current year. It does
+this by itself (`build_hourly.py --absorb-prior-year`). If it fails, the monthly-granularity
+charts develop a visible 12-month hole and `ROLLOVER.md` is the recovery.
 
 ### For the team — who does what
 
@@ -103,8 +120,8 @@ Almost nobody needs to "update" anything. The three situations, in the order the
 | Situation | What to do | Who can |
 |---|---|---|
 | **Normal use** — you want current numbers | **Just open the workbook.** It pulls the latest published data on open. | Anyone |
-| **You want data fresher than the last scheduled run** | Open the status page and press **Start a refresh** (~20 min), then re-open the workbook. | Anyone with the link |
-| **The chart itself is wrong** — a missing year, an unwanted technology | Download the newest workbook + deck from the status page and replace both on the share. | Anyone |
+| **You want data fresher than the last scheduled run** | Open the status page and press **Start a refresh**, then re-open the workbook. The page quotes how long the last run took. | Anyone with the link |
+| **The chart itself is wrong** — an unwanted technology, a gap, a caption | Not a missing year: that fixes itself on refresh. Otherwise the file needs rebuilding, and if the deck is UpSlide-linked that means `merge_into_linked.py`, not a download. | Whoever holds the template |
 
 **The status page is the one link to share:**
 <https://power-price-data.fredhill.workers.dev>

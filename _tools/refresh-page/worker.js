@@ -440,7 +440,22 @@ function page({ status, run, health, msg, err, hasToken, tokenWorks, typical, el
   // The trigger is deliberately conservative: a failed run, or data past its tolerance. Either can
   // have other causes, so the wording says "most likely" rather than diagnosing. It names no
   // GitHub URL, per the same day's ask.
-  const runFailed = run && run.status === "completed" && run.conclusion !== "success";
+  //
+  // A CANCELLATION IS NOT A FAILURE, AND THIS BLOCK MISSED THAT (fixed 2026-09-06). The headline
+  // above was corrected on 2026-08-26 to distinguish the two, and this gate was not, because it
+  // reads the RUN's conclusion rather than the health record. GitHub reports a cancelled run as
+  // completed with conclusion "cancelled", so the page said "the last refresh was stopped before
+  // it finished, nothing failed" and simultaneously showed a red block telling every reader to
+  // replace the ENTSO-E key. Observed live on 2026-09-06 with the data current and the key fine.
+  // A queued run superseded by a newer one is cancelled the same way, so this was reachable
+  // without anyone pressing anything.
+  //
+  // Gate on the HEALTH RECORD, which is the thing that already knows the difference, and fall
+  // back to the run only when there is no health record to read.
+  const runFailed = health
+    ? health.state === "failed"
+    : run && run.status === "completed"
+      && run.conclusion !== "success" && run.conclusion !== "cancelled";
   const needsHelp = runFailed || stale;
   const recover = needsHelp ? `
 <div class="card" style="border-left:4px solid #b3261e">

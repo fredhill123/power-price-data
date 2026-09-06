@@ -276,6 +276,43 @@ check(noToken.includes("has not been configured") && !noToken.includes("Start a 
         "no health record at all reads as healthy, not as an error");
 }
 
+// 8b. A CANCELLATION MUST NOT RAISE THE RECOVERY BLOCK (2026-09-06). The headline learned to
+// tell cancelled from failed on 2026-08-26; the recovery block did not, because it read the
+// RUN's conclusion instead of the health record and GitHub reports a cancelled run as completed
+// with a non-success conclusion. Seen live on 2026-09-06: the page said "nothing failed" and,
+// three inches below, told the reader to go and replace the ENTSO-E key. A queued run superseded
+// by a newer one cancels the same way, so nobody has to press anything to reach it.
+{
+  STATUS = null;
+  // BOTH halves of the live state, or this asserts nothing: the run must be cancelled TOO.
+  // With the default success run in place these three checks pass against the old gate as
+  // well, because `run.conclusion !== "success"` was already false. What reproduced the fault
+  // on 2026-09-06 is a cancelled run alongside a cancelled health record.
+  RUNS = [{ status: "completed", conclusion: "cancelled",
+            updated_at: "2026-09-06T07:13:00Z",
+            html_url: "https://example.invalid/runs/1" }];
+  HEALTH = { state: "cancelled", reason: "the run was stopped before it finished",
+             series: [], fatal: [], stale: [] };
+  const stopped = flat(await (await worker.fetch(get("/"), env)).text());
+  check(stopped.includes("stopped before it finished"),
+        "a cancelled run is described as stopped, not as failed");
+  check(!stopped.includes("data-source key"),
+        "and it does NOT tell the reader to replace the ENTSO-E key");
+  check(!stopped.includes("If the refresh keeps failing"),
+        "the recovery block stays down when nothing has failed");
+
+  // The other half of the same gate: a real failure must still raise it, driven by the health
+  // record rather than by the run, which is what the fix changed.
+  HEALTH = { state: "failed", reason: "generation: nothing stored",
+             series: ["generation"], fatal: [], stale: [] };
+  const broken = flat(await (await worker.fetch(get("/"), env)).text());
+  check(broken.includes("If the refresh keeps failing") && broken.includes("data-source key"),
+        "a failed health record still raises the recovery block");
+
+  HEALTH = null;
+  RUNS = null;
+}
+
 // HOW LONG A RUN TAKES, derived and never asserted (added 2026-08-26).
 //
 // The page said "about 20 minutes" in four places. On the morning this was written the last

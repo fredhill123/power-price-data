@@ -31,6 +31,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 MANIFEST = os.path.join(HERE, "workbook_queries.json")
 CHARTS = os.path.join(ROOT, "published", "charts")
+# The BUILD's own output, which is gitignored and therefore holds only what THIS run made.
+# Checking published/charts alone is not enough and the reason is the whole point of this
+# guard: the build job starts with actions/checkout, so published/charts arrives already
+# full of the PREVIOUS run's files, and the publish step copies over them rather than
+# replacing the directory. A feed that silently stopped being generated would leave last
+# week's file sitting there, the check would pass, and the stale copy would be committed
+# again — the exact failure this exists to catch, wearing the previous run's clothes.
+BUILD = os.path.join(ROOT, "outputs", "csv", "charts")
 
 # The repo and branch the workbook's URLs are pinned to. If either is ever renamed, every
 # query in every copy of the workbook breaks at once and no amount of correct data helps.
@@ -44,8 +52,12 @@ def load_manifest():
     return json.load(open(MANIFEST))
 
 
-def check(charts_dir=CHARTS, manifest=None):
-    """Returns a list of (file, problem). Empty means every query would still resolve."""
+def check(charts_dir=CHARTS, manifest=None, build_dir=BUILD):
+    """Returns a list of (file, problem). Empty means every query would still resolve.
+
+    build_dir=None checks only the served directory (used by fixtures that are about the
+    served surface alone).
+    """
     man = manifest or load_manifest()
     bad = []
 
@@ -64,6 +76,10 @@ def check(charts_dir=CHARTS, manifest=None):
         p = os.path.join(charts_dir, name)
         if not os.path.exists(p):
             bad.append((name, "MISSING — the workbook's query for it will 404"))
+            continue
+        if build_dir is not None and not os.path.exists(os.path.join(build_dir, name)):
+            bad.append((name, "STALE — present on the served surface but NOT produced by "
+                              "this build, so it is the previous run's file"))
             continue
         if os.path.getsize(p) == 0:
             bad.append((name, "empty file"))

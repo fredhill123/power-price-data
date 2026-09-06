@@ -488,9 +488,16 @@ jobs:
       # here stays green while the reader gets a Power Query error, or keeps the values
       # Excel last saved with nothing saying they are stale.
       #
-      # Runs HERE, against published/charts, because that directory is the exact surface
-      # those URLs serve (status.csv is written straight into it by build_status.py), and
-      # because failing before the 6-minute deck rebuild beats failing after it.
+      # Runs HERE because published/charts is the exact surface those URLs serve
+      # (status.csv is written straight into it by build_status.py), and because failing
+      # before the 6-minute deck rebuild beats failing after it.
+      #
+      # It checks the BUILD OUTPUT as well as the served directory, and that second half
+      # is not belt-and-braces. This job starts with actions/checkout, so published/charts
+      # arrives already holding the PREVIOUS run's files, and the publish step copies over
+      # them rather than replacing the directory. A feed that quietly stopped being
+      # generated would leave last week's file in place — present, populated, stale — and
+      # a check that only read the served surface would pass it and commit it again.
       #
       # The list is EXTRACTED from the workbook, never typed: EXCEL_SETUP.md described 18
       # files where the workbook queries 24, so a hand-transcribed list would have shipped

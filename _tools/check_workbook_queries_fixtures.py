@@ -35,16 +35,25 @@ def man(files=("a.csv", "b.csv"), **kw):
     return m
 
 
-def run(contents, **kw):
-    """contents: {filename: text or None}. None means do not create the file."""
+def run(contents, built=None, **kw):
+    """contents: {filename: text or None} on the SERVED surface. None = do not create.
+
+    built: which of those the build actually produced this run. Defaults to all of them,
+    which is the healthy case. Pass a shorter list to model a stale leftover.
+    """
     d = tempfile.mkdtemp()
+    b = tempfile.mkdtemp()
     try:
         for n, text in contents.items():
-            if text is not None:
-                open(os.path.join(d, n), "w", encoding="utf-8").write(text)
-        return cwq.check(charts_dir=d, manifest=man(**kw))
+            if text is None:
+                continue
+            open(os.path.join(d, n), "w", encoding="utf-8").write(text)
+            if built is None or n in built:
+                open(os.path.join(b, n), "w", encoding="utf-8").write(text)
+        return cwq.check(charts_dir=d, manifest=man(**kw), build_dir=b)
     finally:
         shutil.rmtree(d, ignore_errors=True)
+        shutil.rmtree(b, ignore_errors=True)
 
 
 def main():
@@ -87,6 +96,17 @@ def main():
     noload = run({"a.csv": GOOD, "b.csv": GOOD}, refresh_on_load=["0"])
     check("a workbook that no longer refreshes on open is caught", len(noload) == 1,
           str(noload))
+
+    # THE HOLE THIS GUARD SHIPPED WITH, for about twenty minutes on 2026-09-06. The build
+    # job starts with actions/checkout, so published/charts arrives already holding the
+    # PREVIOUS run's files and the publish step copies over them rather than replacing the
+    # directory. A feed that quietly stopped being generated leaves last week's file in
+    # place: present, populated, and completely stale. Checking the served surface alone
+    # passes it, and the stale copy gets committed again — the very failure this guard
+    # exists to catch, wearing the previous run's clothes.
+    stale = run({"a.csv": GOOD, "b.csv": GOOD}, built=["a.csv"])
+    check("a file this build did NOT produce is caught, however healthy it looks",
+          len(stale) == 1 and "STALE" in stale[0][1], str(stale))
 
     # Several at once must all be reported, not just the first: a person fixing this wants
     # the whole list, not one round trip per file.

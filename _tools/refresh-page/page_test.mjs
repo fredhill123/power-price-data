@@ -308,6 +308,36 @@ check(noToken.includes("has not been configured") && !noToken.includes("Start a 
   const broken = flat(await (await worker.fetch(get("/"), env)).text());
   check(broken.includes("If the refresh keeps failing") && broken.includes("data-source key"),
         "a failed health record still raises the recovery block");
+  check(broken.includes("repair run retries the missing series"),
+        "and an ordinary failure still promises the repair run");
+
+  // 8c. A FAILURE NO RETRY CAN FIX (2026-09-06). The page told every reader a repair run
+  // would retry "within hours" whatever had happened. On 2026-09-02 ENTSO-E started refusing
+  // query windows over a month, every retry met the same HTTP 400, and the repair job fired
+  // twice to reproduce it. A reader following the page sat still for three days.
+  HEALTH = { state: "failed", reason: "load: nothing stored",
+             retryable: false, stuck: "load: HTTPError 400; generation: HTTPError 400",
+             series: ["load", "generation"], fatal: [], stale: [] };
+  const stuck = flat(await (await worker.fetch(get("/"), env)).text());
+  check(!stuck.includes("repair run retries the missing series"),
+        "a failure no retry can fix does not promise a repair run");
+  check(stuck.includes("Waiting will NOT fix this"),
+        "it says plainly that waiting does not help");
+  check(stuck.includes("This one is not the key"),
+        "and the recovery block leads with the fact that the key is not the cause");
+  check(stuck.includes("HTTPError 400"),
+        "while still naming what actually failed");
+  check(stuck.includes("ENTSOE_API_KEY"),
+        "the key steps stay on the page for the commoner failure");
+
+  // A record with no `retryable` field is every record written before this change, and must
+  // read exactly as it did then.
+  HEALTH = { state: "failed", reason: "generation: nothing stored",
+             series: ["generation"], fatal: [], stale: [] };
+  const legacy = flat(await (await worker.fetch(get("/"), env)).text());
+  check(legacy.includes("repair run retries the missing series")
+        && !legacy.includes("Waiting will NOT fix this"),
+        "a health record without the field behaves as it always did");
 
   HEALTH = null;
   RUNS = null;

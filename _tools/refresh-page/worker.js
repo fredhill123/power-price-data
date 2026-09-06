@@ -372,10 +372,20 @@ function page({ status, run, health, msg, err, hasToken, tokenWorks, typical, el
     detail = health.reason
       ? `Cause recorded by the last run: ${esc(health.reason)}.`
       : "The last run did not complete; see the repository's Actions log.";
-    detail += stale
-      ? ` Nothing has published for longer than the ${limit}-day tolerance.`
-      : " The figures on this page are still current. A repair run retries the missing"
-        + " series within hours, and the next scheduled run re-pulls the whole year.";
+    detail += stale ? ` Nothing has published for longer than the ${limit}-day tolerance.` : "";
+    // DOES WAITING HELP? (2026-09-06). This promised a repair run "within hours" on every
+    // failure, and on 2026-09-02 that was a promise the pipeline could not keep: ENTSO-E had
+    // begun refusing query windows over a month, so every retry met the same HTTP 400 and the
+    // repair job fired twice to reproduce it. A reader told to sit tight sat tight for three
+    // days. `retryable` is false only when the failing run said so; a record without the field
+    // reads as true, which is how every record before today behaves.
+    detail += health.retryable === false
+      ? " Waiting will NOT fix this: the request itself is now wrong, which takes a change"
+        + " rather than another run. The repair run is deliberately not firing."
+        + (health.stuck ? ` (${esc(health.stuck)})` : "")
+      : (stale ? "" : " The figures on this page are still current.")
+        + " A repair run retries the missing series within hours, and the next scheduled"
+        + " run re-pulls the whole year.";
   } else if (health?.state === "cancelled") {
     // Somebody stopped the run, or a newer queued run superseded it. Nothing failed and
     // nothing is wrong with the data, so this is a note. Before 2026-08-26 the notify job
@@ -460,6 +470,16 @@ function page({ status, run, health, msg, err, hasToken, tokenWorks, typical, el
   const recover = needsHelp ? `
 <div class="card" style="border-left:4px solid #b3261e">
   <h2>If the refresh keeps failing</h2>
+  ${health?.retryable === false ? `
+  <p><strong>This one is not the key.</strong> The last run failed because the data source rejected
+  the request itself rather than because it was unavailable, which is a different problem: a query
+  the platform no longer accepts, or something it has renamed. No amount of retrying clears it, and
+  replacing the key below will not either. Someone with repository access needs to open the run log
+  and change the code, usually by updating the <code>entsoe-py</code> version pinned in
+  <code>requirements.txt</code>. This is exactly what happened on 2 September 2026.
+  ${health.stuck ? `<br><span class="muted">What failed: ${esc(health.stuck)}</span>` : ""}</p>
+  <p class="muted">The steps below remain correct for the other kind of failure, which is the
+  commoner one.</p>` : ""}
   <p>The most likely cause is the <strong>data-source key</strong>. The pipeline reads prices from
   the ENTSO-E Transparency Platform with a key that belongs to whoever registered for one, and a key
   stops working if that account is closed or the key is withdrawn. Nothing else here needs replacing,

@@ -652,6 +652,21 @@ jobs:
               stale += r.get("stale") or []
               series |= set(r.get("series") or [])
           state = os.environ.get("RUN_STATE") or "failed"
+          # CAN ANOTHER RUN FIX THIS? (2026-09-06). fetch.py already knew — `_transient`
+          # decides whether to retry — and threw the answer away, so a malformed request and
+          # a gateway timeout reached this file looking identical. On 2026-09-02 that cost two
+          # repair runs and three days: ENTSO-E started refusing windows over a month, the
+          # pinned entsoe-py kept sending them, and every re-run met the same 400.
+          #
+          # Retryable only if EVERY fatal gap is. A repair that re-fetches four transient
+          # series still publishes nothing while the fifth is malformed.
+          #
+          # DEFAULT TRUE, on both sides: a gap record without the field (one written before
+          # today, or a failure that never reached fetch.py) behaves exactly as it used to.
+          stuck = [g for g in fatal if g.get("retryable") is False]
+          retryable = not stuck
+          stuck_why = ("; ".join(f"{g['series']}: {g.get('cause','?')}" for g in stuck)
+                       if stuck else "")
           out = {
               "state": state,
               "at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
@@ -663,6 +678,8 @@ jobs:
                          else "the run was stopped before it finished" if state == "cancelled"
                          else "the run failed after the fetch step — see the run log"),
               "series": sorted(series),
+              "retryable": retryable,
+              "stuck": stuck_why,
               "fatal": fatal,
               "stale": stale,
           }
@@ -687,6 +704,28 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          # WHICH KIND OF FAILURE, read straight off the health record this job just wrote.
+          # Until 2026-09-06 the body always said "retry the workflow, it is usually nothing
+          # else", which on 2026-09-02 was advice that could not work and was followed twice
+          # by the repair job before a person read the log three days later.
+          VERDICT="Probably transient. The repair run later today retries automatically."
+          if [ -f published/charts/health.json ]; then
+            V=$(python - <<'PY'
+          import json
+          try:
+              h = json.load(open("published/charts/health.json"))
+          except Exception:
+              h = {}
+          if h.get("retryable") is False:
+              print("**RETRYING WILL NOT FIX THIS.** " + (h.get("stuck") or "")
+                    + ". A 4xx, a schema change or a renamed upstream label needs a code "
+                      "change. The repair run is deliberately not firing.")
+          else:
+              print("Probably transient. The repair run later today retries automatically.")
+          PY
+          ) || V=""
+            [ -n "$V" ] && VERDICT="$V"
+          fi
           TITLE="Data refresh is failing"
           BODY=$(cat <<EOF
           @${{ github.repository_owner }} — the ENTSO-E refresh failed.
@@ -694,6 +733,7 @@ jobs:
           * **Run:** $RUN_URL
           * **Triggered by:** \`$EVENT\`
           * **When:** $(date -u +'%Y-%m-%d %H:%M UTC')
+          * **Can a re-run fix it?** $VERDICT
 
           **What this means.** No new data was published. The workbook keeps showing the
           last good figures, so nothing is wrong with what people are already looking at —
@@ -703,14 +743,22 @@ jobs:
           **What to do.** Open the run log above and read the first red step. The usual
           causes, in the order they actually occur:
 
-          1. ENTSO-E was down or rate-limiting — retry the workflow, it is usually nothing else.
-          2. The coverage guard refused to publish because a feed lost data. That is the guard
+          1. ENTSO-E was down or rate-limiting (a 5xx, a timeout). Retry the workflow; the
+             repair run is already doing that for you within hours.
+          2. ENTSO-E answered a 4xx, or renamed something. **A retry cannot fix this** and the
+             line above will say so. It means the request itself is now wrong: a query window
+             the platform no longer accepts, a renamed production-type label, a changed schema.
+             The fix is a code change, usually a dependency bump. This is what happened on
+             2 September 2026.
+          3. The coverage guard refused to publish because a feed lost data. That is the guard
              doing its job; the log names the file and the columns.
-          3. A pinned dependency has no wheel any more — the failure is at \`pip install\`.
+          4. A pinned dependency has no wheel any more — the failure is at \`pip install\`.
 
-          **If nobody is available to look at this,** it is not urgent. The next scheduled run
-          retries by itself within seven days, and the run on the 2nd of each month re-pulls the
-          whole year from scratch, which repairs most stored-data problems without anyone acting.
+          **If nobody is available to look at this,** it depends on which of the two it is, and
+          the line at the top says which. A transient failure heals itself: the repair run
+          retries the same day and the next scheduled run is at most 8 days away. A failure
+          marked not retryable will NOT heal, and every run until someone changes something will
+          fail in exactly the same place.
 
           This issue is reused for every failure — check the comments for how long it has been
           going. Close it once a run goes green.

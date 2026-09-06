@@ -57,9 +57,23 @@ jobs:
           # Only a FATAL gap earns a repair. "ok-on-stored-data" means the run published
           # from the fallback store, which is a note for the reader, not a job to redo:
           # the next scheduled full re-pull replaces it anyway.
-          go = h.get("state") == "failed" and bool(h.get("series"))
+          #
+          # AND ONLY A RETRYABLE ONE (2026-09-06). On 2026-09-02 this gate said yes twice to
+          # a failure no retry could clear: ENTSO-E had begun refusing query windows longer
+          # than a month, the pinned entsoe-py kept sending them, and both dispatched repair
+          # runs met the identical HTTP 400 on all five markets. Two runs, thirty-odd runner
+          # minutes, and a status page that kept promising a repair was under way, for a
+          # fault that needed a person.
+          #
+          # `retryable` is written by the failing run from fetch.py's own judgement, the same
+          # one it uses to decide whether to retry in-process. MISSING MEANS TRUE, so a health
+          # record written before today behaves exactly as it did.
+          retryable = h.get("retryable", True) is not False
+          go = h.get("state") == "failed" and bool(h.get("series")) and retryable
           print(f"go={'true' if go else 'false'}")
           print(f"why={h.get('reason','')[:200]}")
+          print(f"stuck={h.get('stuck','')[:200]}")
+          print(f"retryable={'true' if retryable else 'false'}")
           print(f"series={','.join(h.get('series') or [])}")
           PY
       - name: Re-fetch only the missing series, then publish as normal
@@ -73,4 +87,15 @@ jobs:
           gh workflow run refresh.yml --ref "${GITHUB_REF_NAME}" -f repair=true
       - name: Nothing to do
         if: steps.gate.outputs.go != 'true'
-        run: echo "the last run did not report a missing series — no repair needed"
+        run: |
+          if [ "${{ steps.gate.outputs.retryable }}" = "false" ]; then
+            echo "NOT REPAIRING, deliberately. The last run failed in a way no re-run can fix:"
+            echo "  ${{ steps.gate.outputs.stuck }}"
+            echo
+            echo "A 4xx, a schema change or a renamed upstream label needs a code change. The"
+            echo "failure issue says the same thing, and the status page says it to the public."
+            echo "Re-dispatching here would burn a runner to reproduce the identical error, which"
+            echo "is what happened twice on 2026-09-02."
+          else
+            echo "the last run did not report a missing series — no repair needed"
+          fi

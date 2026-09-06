@@ -115,6 +115,61 @@ def main():
     fetch._attempt("load", bad_request, os.path.join(tmp, "DE_load_2025.parquet"), force=True)
     check("a 400 is NOT retried", bad["n"] == 1, f"{bad['n']} attempts")
 
+    # ---- and the reason SURVIVES, which until 2026-09-06 it did not ----------------------
+    # _transient already made this judgement in order to decide whether to retry, then threw
+    # it away, so the repair workflow re-dispatched a malformed request twice on 2026-09-02
+    # and failed identically both times. These pin the class to the gap record.
+    yr = pd.Timestamp.now(tz="UTC").year
+    # Its OWN directory. These probes want paths with nothing stored, and the bounded-fallback
+    # block below reuses `good` at DE_generation_<year>.parquet in tmp; sharing the directory
+    # meant deleting the file that test depends on, and it failed three assertions away from
+    # the change that caused it.
+    cls = os.path.join(tmp, "cls"); os.makedirs(cls, exist_ok=True)
+    fetch.OUTCOMES.clear(); fetch.FAILURES.clear()
+    p400 = os.path.join(cls, f"DE_load_{yr}.parquet")
+    fetch._attempt("load", bad_request, p400, force=True)
+    g400 = fetch.unmet_requirements()
+    check("a 400 gap is marked NOT retryable",
+          len(g400) == 1 and g400[0].get("retryable") is False, str(g400))
+    check("and the record names what failed", bool(g400 and "400" in g400[0].get("cause", "")),
+          str(g400))
+    ok400, why400 = fetch.retry_verdict(g400)
+    check("retry_verdict refuses a repair run", ok400 is False, str(why400))
+    check("and says which series is stuck", "load" in why400, why400)
+
+    fetch.OUTCOMES.clear(); fetch.FAILURES.clear()
+    p504 = os.path.join(cls, f"DE_generation_{yr}.parquet")
+    if os.path.exists(p504):
+        os.remove(p504)                       # nothing stored, so this lands in `hard`
+    fetch._attempt("generation", dead, p504, force=True)
+    g504 = fetch.unmet_requirements()
+    check("a 504 gap stays retryable",
+          len(g504) == 1 and g504[0].get("retryable") is True, str(g504))
+    check("retry_verdict allows the repair", fetch.retry_verdict(g504)[0] is True)
+
+    # A gap raised somewhere that records no class must behave as it always did. Anything
+    # else would make this change a silent behaviour change on every unclassified failure.
+    fetch.OUTCOMES.clear(); fetch.FAILURES.clear()
+    fetch.OUTCOMES[p504] = ("generation", "fail")
+    gu = fetch.unmet_requirements()
+    check("an unclassified failure defaults to retryable",
+          len(gu) == 1 and gu[0].get("retryable") is True and fetch.retry_verdict(gu)[0],
+          str(gu))
+
+    # Mixed: one transient and one not. A repair that re-fetches the transient half still
+    # cannot publish while the other half is missing, so the verdict must be "no".
+    fetch.OUTCOMES.clear(); fetch.FAILURES.clear()
+    fetch._attempt("generation", dead, p504, force=True)
+    fetch._attempt("load", bad_request, p400, force=True)
+    mixed = fetch.unmet_requirements()
+    check("one unretryable failure among transient ones still refuses the repair",
+          len(mixed) == 2 and fetch.retry_verdict(mixed)[0] is False, str(mixed))
+
+    fetch.OUTCOMES.clear(); fetch.FAILURES.clear()
+    for _p in (p400, p504):
+        if os.path.exists(_p):
+            os.remove(_p)
+
     # "nothing published for this period" is DATA, not a fault
     def nodata(_start=None):
         raise fetch.NoMatchingDataError("nothing there")

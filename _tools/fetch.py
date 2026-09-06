@@ -160,6 +160,21 @@ LOG = []
 # same wall. A fetch that did not fetch has to say so, in its own step.
 OUTCOMES = {}        # raw_path -> (label, "ok"|"skip"|"none"|"empty"|"fail")
 
+# WHY A FAILURE FAILED, kept beside the outcome (2026-09-06). `_transient` already made this
+# judgement in order to decide whether to retry, and then threw it away, so everything
+# downstream treated a 400 exactly like a 504: the repair workflow re-dispatched the identical
+# request, the status page offered the same advice, and the issue said "retry the workflow, it
+# is usually nothing else".
+#
+# On 2026-09-02 that was wrong in the way that costs days. ENTSO-E began refusing query windows
+# longer than one month; the pinned entsoe-py kept sending them and got HTTP 400 on load,
+# generation and both cross-border series for all five ENTSO-E markets. Two repair runs fired
+# and failed identically, because no retry can make a malformed request well-formed. It took a
+# person reading a log, three days later.
+#
+# So the class travels with the gap: raw_path -> {"exc", "status", "retryable"}.
+FAILURES = {}
+
 # Series the rest of the pipeline cannot do without. `generation` is on the list because
 # net load (demand - wind - solar) is derived from it, and a missing year there removes a
 # chart series, which is a hard error downstream rather than a gap.
@@ -374,7 +389,16 @@ def _attempt(label, fn, path, force, merge=False, full_start=None):
         log(f"  none  {label} (no data published)")
         OUTCOMES[path] = (label, "none")
     except Exception as ex:
-        log(f"  FAIL  {label}: {type(ex).__name__}: {str(ex)[:90]}")
+        st = getattr(getattr(ex, "response", None), "status_code", None)
+        # `_transient` is the same judgement the retry loop above already made. Recording it
+        # is what lets the repair run, the status page and the failure issue stop treating a
+        # malformed request as a bad minute. An exception we cannot classify counts as
+        # RETRYABLE, deliberately: the cost of a needless two-minute repair is far below the
+        # cost of not retrying something that would have cleared.
+        retryable = _transient(ex)
+        FAILURES[path] = {"exc": type(ex).__name__, "status": st, "retryable": retryable}
+        log(f"  FAIL  {label}: {type(ex).__name__}: {str(ex)[:90]}"
+            f"{'' if retryable else '  [NOT RETRYABLE — this needs a change, not a re-run]'}")
         OUTCOMES[path] = (label, "fail")
     time.sleep(SLEEP)
 
@@ -603,9 +627,10 @@ def classify_gaps():
     for path, (label, state) in OUTCOMES.items():
         if state != "fail" or not _required(label):
             continue
+        cls = _failure_class(path)
         if not (os.path.exists(path) and os.path.getsize(path) > 0):
             hard.append({"series": label, "file": os.path.basename(path),
-                         "why": "nothing stored"})
+                         "why": "nothing stored", **cls})
             continue
         m = re.search(r"_(\d{4})\.parquet$", path)
         year = int(m.group(1)) if m else None
@@ -614,17 +639,51 @@ def classify_gaps():
         end = _stored_coverage_end(path)
         if end is None:
             hard.append({"series": label, "file": os.path.basename(path),
-                         "why": "stored file unreadable"})
+                         "why": "stored file unreadable", **cls})
             continue
         age = (now - end).days
         if age > FALLBACK_DAYS:
             hard.append({"series": label, "file": os.path.basename(path),
                          "why": f"stored data ends {end.date()}, {age} days old, "
-                                f"past the {FALLBACK_DAYS}-day bound"})
+                                f"past the {FALLBACK_DAYS}-day bound", **cls})
         else:
             stale.append({"series": label, "file": os.path.basename(path),
                           "covers_to": end.isoformat(timespec="minutes"), "days_old": age})
     return hard, stale
+
+
+def _failure_class(path):
+    """What kind of failure this was, for a gap record: retryable, and why it failed.
+
+    Defaults to RETRYABLE when nothing was recorded, so a gap that predates this (or one
+    raised somewhere that does not populate FAILURES) behaves exactly as it did before.
+    """
+    f = FAILURES.get(path)
+    if not f:
+        return {"retryable": True, "cause": "unclassified"}
+    bits = f["exc"]
+    if f.get("status"):
+        bits += f" {f['status']}"
+    return {"retryable": bool(f["retryable"]), "cause": bits}
+
+
+def retry_verdict(hard=None):
+    """(retryable, why) over a set of hard gaps. Read by the workflow's health record.
+
+    Retryable only if EVERY fatal gap is. One malformed request among five transient ones
+    still means a person has to change something, and a repair run that re-fetches the other
+    four cannot publish while the fifth is missing.
+    """
+    hard = unmet_requirements() if hard is None else hard
+    if not hard:
+        return True, ""
+    stuck = [g for g in hard if not g.get("retryable", True)]
+    if not stuck:
+        return True, "every failure looks transient; a repair run is worth trying"
+    names = ", ".join(sorted({f"{g['series']} ({g.get('cause','?')})" for g in stuck}))
+    return False, ("retrying cannot fix this: " + names +
+                   ". A 4xx, a schema change or a renamed label needs a code change, "
+                   "not another run.")
 
 
 def unmet_requirements():

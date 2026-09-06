@@ -32,6 +32,22 @@ BASE = https://raw.githubusercontent.com/Power-Utilities-team/power-price-data/m
 | `figB_penetration.csv`      | **B_Penetration** — wind+solar % of generation (12-mo avg) by market |
 | `figC_capture_erosion.csv`  | **C_CaptureErosion** — solar/wind capture vs baseload (Germany) |
 | `figD_netload_duck.csv`     | **D_NetloadDuck** — net-load duck (demand − wind − solar) by year (Germany) |
+| `capture_monthly_extra.csv` | monthly capture price — the GB/extra-market half of the split table |
+| `fig5_capture_window.csv`   | Fig 5 capture on the rolling 7-year window (`_w1`..`_w7` columns) |
+| `fig9_capacity_window.csv`  | Fig 9 capacity on the rolling 7-year window |
+| `hydro_window.csv`          | weekly hydro reservoir bands (min/range per market) |
+| `line_windows.csv`          | the year labels and line series the windowed charts read |
+| `status.csv`                | **the staleness banner** — the row every Status-sheet cell points at |
+
+> **These 24 are the whole contract, and they are now checked.** Until 2026-09-06 this
+> table listed only the first 18: the six above were queried by the workbook without being
+> written down anywhere, `status.csv` among them, which drives the banner. A workbook
+> rebuilt by following the short list would have come out missing six queries.
+>
+> The authoritative list is `_tools/workbook_queries.json`, **extracted from the workbook
+> itself** by `_tools/extract_workbook_queries.py`. `check_workbook_queries.py` fails the
+> build if any of the 24 would 404. If you add or remove a query, re-export the workbook,
+> re-run the extractor and commit the new manifest in the same change.
 
 The last six (**G1_SolarPeak**, **G2_MonthDuck**, **A_MonthPrice**, **B_Penetration**,
 **C_CaptureErosion**, **D_NetloadDuck**) are the newest tabs — load them the same way

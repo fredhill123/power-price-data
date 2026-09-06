@@ -1,0 +1,38 @@
+{
+ "_comment": "EXTRACTED from the live-linked workbook by extract_workbook_queries.py. Do not hand-edit: re-run the extractor instead.",
+ "source_workbook": "linked-template.xlsx",
+ "extracted": "2026-09-06",
+ "base_urls": [
+  "https://raw.githubusercontent.com/Power-Utilities-team/power-price-data/main/published/charts/"
+ ],
+ "refresh_on_load": [
+  "1"
+ ],
+ "connections": 24,
+ "files": [
+  "capture_monthly.csv",
+  "capture_monthly_extra.csv",
+  "fig1_price_sd.csv",
+  "fig2_intraday_avg.csv",
+  "fig2_intraday_indexed.csv",
+  "fig3_cum_near_neg.csv",
+  "fig3_neg_hours_annual.csv",
+  "fig4_duration_curve.csv",
+  "fig5_capture_abs.csv",
+  "fig5_capture_pct.csv",
+  "fig5_capture_window.csv",
+  "fig6_daily_minmax.csv",
+  "fig7_gen_mix.csv",
+  "fig9_capacity.csv",
+  "fig9_capacity_window.csv",
+  "figA_monthly_price.csv",
+  "figB_penetration.csv",
+  "figC_capture_erosion.csv",
+  "figD_netload_duck.csv",
+  "g1_solar_peakhour.csv",
+  "g2_price_by_month.csv",
+  "hydro_window.csv",
+  "line_windows.csv",
+  "status.csv"
+ ]
+}

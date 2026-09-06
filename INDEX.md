@@ -33,6 +33,8 @@ workbook is now 26 sheets and 84 charts, built end to end by CI._
 | `_tools/validate.py` | adversarial checks vs Redburn figures |
 | `_tools/check_coverage.py` | published data may not SHRINK vs the previous commit — gates the CI publish |
 | `_tools/check_value_stability.py` · `_fixtures.py` | and a number on a CLOSED period may not MOVE — the only check here that compares a value |
+| `_tools/check_workbook_queries.py` · `_fixtures.py` | and the 24 CSVs the share-drive workbook fetches on open must still be there — the only check that reaches past the commit |
+| `_tools/extract_workbook_queries.py` → `workbook_queries.json` | reads those 24 out of the workbook itself, so the list is never transcribed by hand |
 | `_tools/fetch_uk.py` | Great Britain: Elexon (price, generation, load), ECB (GBP/EUR), DUKES (capacity) |
 | `_tools/fetch_hydro.py` · `summarise_hydro.py` | ENTSO-E A72 weekly reservoir levels → the shaded-band exhibits |
 | `_tools/add_extra_charts.py` | CaptureVsBase plus the per-country, monthly and hydro charts |

@@ -102,6 +102,12 @@ def unit_suites():
     # both of its failure directions are expensive: silence puts a wrong figure in a deck,
     # noise trains someone to widen a tolerance until it means nothing.
     run("check_value_stability_fixtures.py")
+    # The only guard that knows the workbook exists. Every other check here stops at the
+    # git commit; this one asks whether the 24 CSVs the share-drive workbook fetches on
+    # open would still be there. Its quiet direction is as load-bearing as its loud one:
+    # the build makes 31 chart CSVs and the workbook queries 24, so a version that
+    # complained about the other seven would be switched off within a week.
+    run("check_workbook_queries_fixtures.py")
     # The public status page. Its own suite ran nowhere for a month while the page quietly
     # promised every visitor that a refresh takes "about 20 minutes", two to three times
     # short once Great Britain and the whole-year pull landed.

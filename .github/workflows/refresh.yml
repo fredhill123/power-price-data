@@ -481,6 +481,26 @@ jobs:
           cp outputs/csv/charts/*.csv published/charts/
           echo "Last refreshed: $(date -u +'%Y-%m-%d %H:%M UTC')" > published/LAST_REFRESH.txt
 
+      # THE LAST MILE (2026-09-06). Everything above this line stops at the git commit.
+      # The workbook on the share drive fetches 24 specific CSVs from
+      # raw.githubusercontent.com every time somebody opens it, and until today nothing
+      # in this pipeline knew those 24 files existed. Rename or drop one and every guard
+      # here stays green while the reader gets a Power Query error, or keeps the values
+      # Excel last saved with nothing saying they are stale.
+      #
+      # Runs HERE, against published/charts, because that directory is the exact surface
+      # those URLs serve (status.csv is written straight into it by build_status.py), and
+      # because failing before the 6-minute deck rebuild beats failing after it.
+      #
+      # The list is EXTRACTED from the workbook, never typed: EXCEL_SETUP.md described 18
+      # files where the workbook queries 24, so a hand-transcribed list would have shipped
+      # a 25% blind spot in the one check whose whole job is to notice.
+      - name: Refuse a publish that would break the live workbook
+        working-directory: _tools
+        run: |
+          python check_workbook_queries_fixtures.py
+          python check_workbook_queries.py
+
       - name: Install Arial-compatible fonts for the chart render
         run: |
           sudo apt-get update -qq

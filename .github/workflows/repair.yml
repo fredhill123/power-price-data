@@ -18,6 +18,14 @@ on:
     # every scheduler on the planet fires at once and GitHub's queue shows it.
     - cron: "7 11 2,10,18,26 * *"
     - cron: "7 15 2,10,18,26 * *"
+    # TWO MORE, 2026-09-05 (Fred: "could we just have more reattempts than we
+    # currently have?"). Four attempts spanning 16 hours instead of two spanning 8.
+    # Deliberately NOT in-run retries: the fetch job already allows 100 minutes and DE
+    # alone takes 60-65, so a longer in-run ladder converts a clean fast failure into a
+    # timeout that truncates the health record this workflow reads. And deliberately
+    # not daily: Fred declined that. Each attempt costs ~14s when nothing is missing.
+    - cron: "7 19 2,10,18,26 * *"
+    - cron: "7 23 2,10,18,26 * *"
   workflow_dispatch:
 
 permissions:

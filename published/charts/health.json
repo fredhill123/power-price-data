@@ -1,7 +1,8 @@
 {
- "state": "ok",
- "at": "2026-09-05T22:37:59+00:00",
- "reason": "",
+ "state": "cancelled",
+ "at": "2026-09-06T07:13:35+00:00",
+ "run": "https://github.com/Power-Utilities-team/power-price-data/actions/runs/34018518155",
+ "reason": "the run was stopped before it finished",
  "series": [],
  "fatal": [],
  "stale": []

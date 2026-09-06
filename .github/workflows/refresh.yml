@@ -153,12 +153,18 @@ jobs:
           # Never fatal. No store yet, a deleted release, a network blip: all of them mean
           # "fetch the whole year", which is exactly what fetch.py does when it finds
           # nothing to merge into. A cold start must not be an outage.
+          # EVERY FAILURE HERE MEANS "FETCH THE WHOLE YEAR", never "stop". No store yet, a
+          # deleted release, a network blip, a truncated asset: fetch.py already widens a
+          # window to the full year when it finds nothing to merge into, so a cold start is a
+          # slower run and not an outage. The `tar` is inside the guard for the same reason —
+          # the default shell is `bash -e`, so a corrupt asset would otherwise kill the job.
           if gh release download "$STORE_TAG" --pattern "raw-${{ matrix.country }}.tar.gz" \
-               --dir _store --clobber 2>/dev/null; then
-            tar -xzf "_store/raw-${{ matrix.country }}.tar.gz" -C data/raw
+               --dir _store --clobber 2>/dev/null \
+             && tar -xzf "_store/raw-${{ matrix.country }}.tar.gz" -C data/raw 2>/dev/null; then
             echo "restored $(ls data/raw | wc -l) stored file(s) for ${{ matrix.country }}"
           else
-            echo "no stored copy for ${{ matrix.country }} yet — this run fetches the full year"
+            rm -rf data/raw/* 2>/dev/null || true   # a half-extracted store is worse than none
+            echo "no usable stored copy for ${{ matrix.country }} — this run fetches the full year"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -285,6 +291,12 @@ jobs:
       # convenience for the NEXT run, and the worst case without it is a full-year fetch.
       - name: Save the fallback store for ${{ matrix.country }}
         if: always()
+        # NON-FATAL, AND IT HAS TO BE SAID IN YAML RATHER THAN IN A COMMENT. The default
+        # shell here is `bash -e`, so the unguarded `tar` below would fail the step and take
+        # the whole fetch job with it — turning a run that fetched perfectly well red because
+        # a convenience for the NEXT run did not work. That is the exact opposite of what a
+        # fallback store is for, and the `|| echo` on the upload alone did not cover it.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STORE_TAG: raw-store
@@ -372,11 +384,14 @@ jobs:
           STORE_TAG: raw-store
         run: |
           mkdir -p data/raw _store
-          if gh release download "$STORE_TAG" --pattern "hydro.tar.gz" --dir _store --clobber 2>/dev/null; then
-            tar -xzf _store/hydro.tar.gz -C data/raw
+          # Guarded the same way as the per-country restore: a corrupt asset costs 21 minutes
+          # of refetching, never a failed build.
+          if gh release download "$STORE_TAG" --pattern "hydro.tar.gz" --dir _store --clobber 2>/dev/null \
+             && tar -xzf _store/hydro.tar.gz -C data/raw 2>/dev/null; then
             echo "restored $(ls data/raw/hydro_*.parquet 2>/dev/null | wc -l) settled hydro year(s)"
           else
-            echo "no stored hydro years yet — this run fetches all of them"
+            rm -f data/raw/hydro_*.parquet 2>/dev/null || true
+            echo "no usable stored hydro years — this run fetches all of them"
           fi
       - name: Fetch the weekly hydro reservoir series
         env:
@@ -389,6 +404,9 @@ jobs:
           python fetch_hydro.py
       - name: Save the settled hydro years
         if: always()
+        # Same reasoning as the per-country save above: a storage step must never be able to
+        # fail a build that succeeded.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STORE_TAG: raw-store
